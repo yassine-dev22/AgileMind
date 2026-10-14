@@ -1,121 +1,89 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api from '../api/axios';
+﻿import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import axios from 'axios';
+import api, { getErrorMessage } from '../api/axios';
+import { AUTH_TOKEN_KEY, normalizeUser } from '../api/session';
 import { useAuth } from './AuthContext';
+import type { User } from './AuthContext';
+export type { User } from './AuthContext';
 
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
-
-export interface User {
-  id: number;
-  email: string;
-  fullName: string;
-  role: 'OWNER' | 'MEMBER' | 'VIEWER' | 'ADMIN';
-  capacityPoints: number;
-}
-
 export interface Project {
-  id: number;
-  name: string;
-  description: string;
-  startDate?: string;
-  endDate?: string;
-  status?: string;
-  owner?: User;
-  members?: User[];
-  requirements?: Requirement[];
-  sprints?: SprintInfo[];
+  id: number; name: string; description: string;
+  startDate?: string; endDate?: string; status?: string;
+  owner?: User; members?: User[]; requirements?: Requirement[]; sprints?: SprintInfo[];
 }
-
 export interface Requirement {
-  id: number;
-  title: string;
-  description: string;
-  color: string;
-  status: TaskStatus;
-  storyPoints: number;
-  sprintId?: number | null;
-  tasks?: Subtask[];
+  id: number; title: string; description: string; color: string;
+  status: TaskStatus | 'BACKLOG'; storyPoints: number; sprintId?: number | null; tasks?: Subtask[];
 }
-
 export interface Subtask {
-  id: number;
-  requirementId: number;
-  title: string;
-  description?: string;
-  priority: string;
-  status: TaskStatus;
-  isCompleted: boolean;
-  effortPoints: number;
-  estimatedHours: number;
-  assigneeId?: number | null;
-  assignee?: User | null;
-  statusChangedAt?: string;
+  id: number; requirementId: number; title: string; description?: string;
+  priority: string; status: TaskStatus; isCompleted: boolean; effortPoints: number; estimatedHours: number;
+  assigneeId?: number | null; assignee?: User | null; statusChangedAt?: string;
 }
-
 export interface AiInsight {
-  id: number;
-  explanation: string;
-  confidenceScore: number;
-  acknowledged: boolean;
+  id: number; explanation: string; confidenceScore: number; acknowledged: boolean;
   insightType: 'RISK_ALERT' | 'REASSIGNMENT_SUGGESTION' | 'RETROSPECTIVE';
-  sprintHealthScore: number;
-  riskLevel: string;
-  bottlenecksJson?: string;
-  automatedStandupSummary?: string;
+  sprintHealthScore: number; riskLevel: string; bottlenecksJson?: string; automatedStandupSummary?: string;
 }
-
 export interface SprintInfo {
-  sprintId: number;
-  objective: string;
-  startDate: string;
-  endDate: string;
-  sprintStatus: 'PLANNED' | 'ACTIVE' | 'DONE';
-  pointsPlanned: number;
-  isActive: boolean;
-  isConcluded: boolean;
+  sprintId: number; objective: string; startDate: string; endDate: string;
+  sprintStatus: 'PLANNED' | 'ACTIVE' | 'DONE'; pointsPlanned: number; isActive: boolean; isConcluded: boolean;
 }
-
 export interface SprintData {
-  id: number;
-  name: string;
-  objectives: string;
-  healthScore: number;
-  startDate: string;
-  endDate: string;
-  requirements: Requirement[];
-  subtasks: Subtask[];
-  insights: AiInsight[];
+  id: number; name: string; objectives: string; healthScore: number | null;
+  startDate: string; endDate: string; requirements: Requirement[]; subtasks: Subtask[];
+  insights: AiInsight[]; insightsAvailable: boolean; burndownPoints: BurndownPoint[];
   sprintStatus: 'PLANNED' | 'ACTIVE' | 'DONE';
 }
+export interface BurndownPoint { day: string; remainingPoints: number }
+
+interface RawTask extends Partial<Subtask> { requirement?: { id: number } }
+interface RawRequirement extends Omit<Partial<Requirement>, 'tasks'> {
+  sprint?: { sprintId: number } | null; tasks?: RawTask[]; subtasks?: RawTask[];
+}
+interface ProjectDetail { project: Project; activeSprint: SprintInfo | null; activeSprintTasks: RawTask[]; members: User[] }
+interface HomeData { ownedProjects: Project[]; memberProjects: Project[] }
+interface ProjectMetrics { burndownPoints?: BurndownPoint[] }
 
 interface SprintContextType {
-  projects: Project[];
-  ownedProjects: Project[];
-  memberProjects: Project[];
-  currentProject: Project | null;
-  setCurrentProject: (project: Project | null) => void;
-  sprint: SprintData | null;
-  loading: boolean;
-  members: User[];
-  allProjectRequirements: Requirement[];
-  refreshData: () => Promise<void>;
-  updateSubtaskStatus: (subtaskId: number, newStatus: TaskStatus) => Promise<void>;
+  projects: Project[]; ownedProjects: Project[]; memberProjects: Project[];
+  currentProject: Project | null; setCurrentProject: (project: Project | null) => void;
+  sprint: SprintData | null; loading: boolean; error: string | null; members: User[];
+  allProjectRequirements: Requirement[]; refreshData: () => Promise<void>;
+  updateSubtaskStatus: (subtaskId: number, status: TaskStatus) => Promise<void>;
+  updateSubtaskStatuses: (subtaskIds: number[], status: TaskStatus) => Promise<void>;
   addNewRequirement: (title: string, description: string, color: string) => Promise<void>;
-  addNewSubtask: (requirementId: number, title: string, storyPoints: number, assigneeId?: number | null) => Promise<void>;
-  createNewSprint: (
-    objective: string,
-    startDate: string,
-    endDate: string,
-    plannedStoryPoints: number,
-    requirementIds: number[]
-  ) => Promise<void>;
+  addNewSubtask: (requirementId: number, title: string, points: number, assigneeId?: number | null) => Promise<void>;
+  createNewSprint: (objective: string, start: string, end: string, points: number, requirementIds: number[]) => Promise<void>;
   completeSprint: (sprintId: number) => Promise<void>;
   createProject: (name: string, description: string) => Promise<Project>;
   inviteMember: (email: string) => Promise<void>;
 }
-
 const SprintContext = createContext<SprintContextType | undefined>(undefined);
+const PROJECT_KEY = 'levelup_current_project_id';
+const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE'];
 
-export const SprintProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+function mapTask(task: RawTask, requirementId?: number): Subtask {
+  const status = TASK_STATUSES.includes(task.status as TaskStatus) ? task.status as TaskStatus : 'TODO';
+  return {
+    id: task.id!, requirementId: requirementId ?? task.requirementId ?? task.requirement?.id ?? 0,
+    title: task.title ?? '', description: task.description ?? '', priority: task.priority ?? 'MEDIUM',
+    status, isCompleted: status === 'DONE', effortPoints: task.effortPoints ?? 0,
+    estimatedHours: task.estimatedHours ?? 0, assigneeId: task.assigneeId ?? task.assignee?.id ?? null,
+    assignee: normalizeUser(task.assignee), statusChangedAt: task.statusChangedAt,
+  };
+}
+function mapRequirement(requirement: RawRequirement): Requirement {
+  return {
+    id: requirement.id!, title: requirement.title ?? '', description: requirement.description ?? '',
+    color: requirement.color ?? '#6366F1', status: requirement.status ?? 'BACKLOG',
+    storyPoints: requirement.storyPoints ?? 0, sprintId: requirement.sprintId ?? requirement.sprint?.sprintId ?? null,
+    tasks: (requirement.subtasks ?? requirement.tasks ?? []).map(task => mapTask(task, requirement.id)),
+  };
+}
+
+const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [ownedProjects, setOwnedProjects] = useState<Project[]>([]);
@@ -124,391 +92,203 @@ export const SprintProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [sprint, setSprint] = useState<SprintData | null>(null);
   const [members, setMembers] = useState<User[]>([]);
   const [allProjectRequirements, setAllProjectRequirements] = useState<Requirement[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selectedId = useRef<number | null>(null);
+  const selectionVersion = useRef(0);
+  const detailRequest = useRef<AbortController | null>(null);
+  const homeRequest = useRef<AbortController | null>(null);
 
-  const loadProjects = useCallback(async () => {
-    if (!user) return [];
-    try {
-      const res = await api.get<any>(`/home?userId=${user.id}`);
-      const owned = (res.data.ownedProjects || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        startDate: p.startDate,
-        endDate: p.endDate,
-        status: p.status,
-        owner: p.owner,
-        members: p.members
-      }));
-      const member = (res.data.memberProjects || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        startDate: p.startDate,
-        endDate: p.endDate,
-        status: p.status,
-        owner: p.owner,
-        members: p.members
-      }));
-      setOwnedProjects(owned);
-      setMemberProjects(member);
-      const combined = [...owned, ...member];
-      setProjects(combined);
+  const clearDetails = useCallback(() => {
+    detailRequest.current?.abort();
+    detailRequest.current = null;
+    setSprint(null); setMembers([]); setAllProjectRequirements([]); setLoading(false);
+  }, []);
+
+  const loadProjects = useCallback((): Promise<Project[] | null> => {
+    if (!isAuthenticated || !user) return Promise.resolve(null);
+    homeRequest.current?.abort();
+    const controller = new AbortController();
+    homeRequest.current = controller;
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    return api.get<HomeData>('/home', { signal: controller.signal }).then(({ data }) => {
+      if (controller.signal.aborted || localStorage.getItem(AUTH_TOKEN_KEY) !== token) return null;
+      const owned = data.ownedProjects ?? [];
+      const member = data.memberProjects ?? [];
+      const combined = [...new Map([...owned, ...member].map(project => [project.id, project])).values()];
+      setOwnedProjects(owned); setMemberProjects(member); setProjects(combined);
       return combined;
-    } catch (err) {
-      console.error('Failed to load projects via home API', err);
-      return [];
-    }
-  }, [user]);
+    }).catch((err: unknown) => {
+      if (!axios.isCancel(err) && !controller.signal.aborted) setError(getErrorMessage(err, 'Failed to load your projects.'));
+      return null;
+    });
+  }, [isAuthenticated, user]);
 
   const loadProjectDetail = useCallback(async (projectId: number) => {
-    setLoading(true);
+    if (selectedId.current !== projectId) return;
+    detailRequest.current?.abort();
+    const controller = new AbortController();
+    detailRequest.current = controller;
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const isCurrent = () => !controller.signal.aborted && detailRequest.current === controller
+      && selectedId.current === projectId && localStorage.getItem(AUTH_TOKEN_KEY) === token;
+    setLoading(true); setError(null);
     try {
-      const res = await api.get<any>(`/projects/${projectId}/detail`);
-      const data = res.data;
-
-      // Update current project local details
-      const detailProj: Project = {
-        id: data.project.id,
-        name: data.project.name,
-        description: data.project.description,
-        startDate: data.project.startDate,
-        endDate: data.project.endDate,
-        status: data.project.status,
-        owner: data.project.owner,
-      };
-      setCurrentProjectState(detailProj);
-
-      // Fetch ALL project requirements from dedicated endpoint (includes backlog ones)
-      let mappedReqs: Requirement[] = [];
-      try {
-        const reqsRes = await api.get<any[]>(`/projects/${projectId}/requirements`);
-        mappedReqs = (reqsRes.data || []).map((r: any) => ({
-          id: r.id,
-          title: r.title,
-          description: r.description || '',
-          color: r.color || '#6366F1',
-          status: r.status || 'BACKLOG',
-          storyPoints: r.storyPoints || 0,
-          sprintId: r.sprint ? r.sprint.sprintId : null,
-          tasks: (r.subtasks || r.tasks || []).map((t: any) => ({
-            id: t.id,
-            requirementId: r.id,
-            title: t.title,
-            description: t.description,
-            priority: t.priority,
-            status: t.status,
-            isCompleted: t.isCompleted || false,
-            effortPoints: t.effortPoints || 0,
-            estimatedHours: t.estimatedHours || 0,
-            assigneeId: t.assignee ? t.assignee.id : null,
-            assignee: t.assignee,
-            statusChangedAt: t.statusChangedAt
-          }))
-        }));
-      } catch (reqErr) {
-        console.warn('Failed to load requirements, falling back to project detail', reqErr);
-        // Fallback: use requirements embedded in project detail
-        const rawReqs = data.project.requirements || [];
-        mappedReqs = rawReqs.map((r: any) => ({
-          id: r.id,
-          title: r.title,
-          description: r.description || '',
-          color: r.color || '#6366F1',
-          status: r.status || 'BACKLOG',
-          storyPoints: r.storyPoints || 0,
-          sprintId: r.sprint ? r.sprint.sprintId : null,
-          tasks: (r.subtasks || r.tasks || []).map((t: any) => ({
-            id: t.id,
-            requirementId: r.id,
-            title: t.title,
-            description: t.description,
-            priority: t.priority,
-            status: t.status,
-            isCompleted: t.isCompleted || false,
-            effortPoints: t.effortPoints || 0,
-            estimatedHours: t.estimatedHours || 0,
-            assigneeId: t.assignee ? t.assignee.id : null,
-            assignee: t.assignee,
-            statusChangedAt: t.statusChangedAt
-          }))
-        }));
-      }
-      setAllProjectRequirements(mappedReqs);
-
-      // Map members
-      const mappedMembers: User[] = (data.members || []).map((m: any) => ({
-        id: m.id,
-        email: m.email,
-        fullName: m.fullName || 'Unknown Member',
-        role: m.role || 'MEMBER',
-        capacityPoints: m.capacityPoints || 40
-      }));
-      setMembers(mappedMembers);
-
-      // Map active sprint
+      const [{ data }, { data: requirements }] = await Promise.all([
+        api.get<ProjectDetail>(`/projects/${projectId}/detail`, { signal: controller.signal }),
+        api.get<RawRequirement[]>(`/projects/${projectId}/requirements`, { signal: controller.signal }),
+      ]);
+      if (!isCurrent()) return;
+      const mappedReqs = requirements.map(mapRequirement);
+      let nextSprint: SprintData | null = null;
       if (data.activeSprint) {
-        const activeSprint = data.activeSprint;
-        const tasks = data.activeSprintTasks || [];
-
-        // Map subtasks
-        const mappedSubtasks: Subtask[] = tasks.map((t: any) => ({
-          id: t.id,
-          requirementId: t.requirement ? t.requirement.id : 0,
-          title: t.title,
-          description: t.description || '',
-          priority: t.priority || 'MEDIUM',
-          status: t.status || 'TODO',
-          isCompleted: t.isCompleted || false,
-          effortPoints: t.effortPoints || 0,
-          estimatedHours: t.estimatedHours || 0,
-          assigneeId: t.assignee ? t.assignee.id : null,
-          assignee: t.assignee,
-          statusChangedAt: t.statusChangedAt
-        }));
-
-        // Requirements inside active sprint
-        const sprintRequirements = mappedReqs.filter(r => r.sprintId === activeSprint.sprintId);
-
-        // Fetch AI Insights
-        let mappedInsights: AiInsight[] = [];
-        try {
-          const insightRes = await api.get<any[]>(`/ai/sprint/${activeSprint.sprintId}`);
-          mappedInsights = insightRes.data.map(ins => ({
-            id: ins.id,
-            explanation: ins.explanation,
-            confidenceScore: ins.confidenceScore,
-            acknowledged: ins.acknowledged,
-            insightType: ins.insightType,
-            sprintHealthScore: ins.sprintHealthScore || 100,
-            riskLevel: ins.riskLevel || 'LOW',
-            bottlenecksJson: ins.bottlenecksJson,
-            automatedStandupSummary: ins.automatedStandupSummary
-          }));
-        } catch (insErr) {
-          console.warn('Failed to load AI Insights', insErr);
-        }
-
-        // Fetch Health Score
-        let healthScore = 100;
-        try {
-          const metricsRes = await api.get<any>(`/projects/${projectId}/metrics`);
-          // The backend metrics map includes "healthScore" or active sprint metrics
-          healthScore = metricsRes.data.activeSprintHealthScore || metricsRes.data.healthScore || 100;
-        } catch (healthErr) {
-          console.warn('Failed to load health score from metrics', healthErr);
-        }
-
-        setSprint({
-          id: activeSprint.sprintId,
-          name: activeSprint.objective || `Sprint ${activeSprint.sprintId}`,
-          objectives: activeSprint.objective || '',
-          healthScore: healthScore,
-          startDate: activeSprint.startDate,
-          endDate: activeSprint.endDate,
-          requirements: sprintRequirements,
-          subtasks: mappedSubtasks,
-          insights: mappedInsights,
-          sprintStatus: activeSprint.sprintStatus
-        });
-      } else {
-        setSprint(null);
+        const active = data.activeSprint;
+        const [health, insights, metrics] = await Promise.allSettled([
+          api.get<{ score: number }>(`/sprints/${active.sprintId}/health`, { signal: controller.signal }),
+          api.get<AiInsight[]>(`/ai/sprint/${active.sprintId}`, { signal: controller.signal }),
+          api.get<ProjectMetrics>(`/projects/${projectId}/metrics`, { signal: controller.signal }),
+        ]);
+        if (!isCurrent()) return;
+        nextSprint = {
+          id: active.sprintId, name: active.objective || `Sprint ${active.sprintId}`, objectives: active.objective ?? '',
+          healthScore: health.status === 'fulfilled' ? health.value.data.score : null,
+          startDate: active.startDate, endDate: active.endDate,
+          requirements: mappedReqs.filter(requirement => requirement.sprintId === active.sprintId),
+          subtasks: (data.activeSprintTasks ?? []).map(task => mapTask(task)),
+          insights: insights.status === 'fulfilled' ? insights.value.data : [],
+          insightsAvailable: insights.status === 'fulfilled',
+          burndownPoints: metrics.status === 'fulfilled' ? metrics.value.data.burndownPoints ?? [] : [],
+          sprintStatus: active.sprintStatus,
+        };
       }
+      if (!isCurrent()) return;
+      setCurrentProjectState(data.project);
+      setAllProjectRequirements(mappedReqs);
+      setMembers((data.members ?? []).map(normalizeUser).filter((member): member is User => member !== null));
+      setSprint(nextSprint);
     } catch (err) {
-      console.error('Failed to load project details', err);
-      setSprint(null);
+      if (isCurrent() && !axios.isCancel(err)) {
+        setError(getErrorMessage(err, 'Failed to load the project workspace.'));
+        setSprint(null); setMembers([]); setAllProjectRequirements([]);
+      }
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }, []);
 
   const setCurrentProject = useCallback((project: Project | null) => {
-    setCurrentProjectState(project);
+    selectionVersion.current++;
+    selectedId.current = project?.id ?? null;
+    clearDetails(); setError(null); setCurrentProjectState(project);
     if (project) {
-      localStorage.setItem('levelup_current_project_id', String(project.id));
-      loadProjectDetail(project.id);
-    } else {
-      localStorage.removeItem('levelup_current_project_id');
-      setSprint(null);
-      setAllProjectRequirements([]);
-      setMembers([]);
-    }
-  }, [loadProjectDetail]);
+      localStorage.setItem(PROJECT_KEY, String(project.id));
+      void loadProjectDetail(project.id);
+    } else localStorage.removeItem(PROJECT_KEY);
+  }, [clearDetails, loadProjectDetail]);
 
-  const refreshData = useCallback(async () => {
-    if (!isAuthenticated) return;
-    const list = await loadProjects();
-    const storedId = localStorage.getItem('levelup_current_project_id');
-    if (storedId) {
-      const activeProj = list.find(p => String(p.id) === storedId);
-      if (activeProj) {
-        setCurrentProjectState(activeProj);
-        await loadProjectDetail(activeProj.id);
-        return;
-      }
-    }
-    setCurrentProjectState(null);
-    setSprint(null);
-  }, [isAuthenticated, loadProjects, loadProjectDetail]);
+  const refreshData = useCallback(() => {
+    const version = selectionVersion.current;
+    return loadProjects().then(async list => {
+      if (!list || version !== selectionVersion.current) return;
+      const storedId = localStorage.getItem(PROJECT_KEY);
+      const project = list.find(item => String(item.id) === storedId);
+      if (project) {
+        selectedId.current = project.id;
+        setCurrentProjectState(project);
+        await loadProjectDetail(project.id);
+      } else setCurrentProject(null);
+    });
+  }, [loadProjects, loadProjectDetail, setCurrentProject]);
 
   useEffect(() => {
-    refreshData();
+    if (isAuthenticated) void refreshData();
+    return () => {
+      homeRequest.current?.abort(); detailRequest.current?.abort();
+    };
   }, [isAuthenticated, refreshData]);
 
-  const updateSubtaskStatus = async (subtaskId: number, newStatus: TaskStatus) => {
+  const requireProject = useCallback(() => {
+    if (!currentProject || selectedId.current !== currentProject.id) throw new Error('Select a project first.');
+    return currentProject.id;
+  }, [currentProject]);
+
+  const mutateProject = useCallback(async (mutation: () => Promise<unknown>) => {
+    const id = requireProject();
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    await mutation();
+    if (selectedId.current === id && localStorage.getItem(AUTH_TOKEN_KEY) === token) await loadProjectDetail(id);
+  }, [requireProject, loadProjectDetail]);
+
+  const updateSubtaskStatus = useCallback((id: number, status: TaskStatus) => mutateProject(() => api.patch(`/tasks/${id}/status`, { status })), [mutateProject]);
+  const updateSubtaskStatuses = useCallback(async (ids: number[], status: TaskStatus) => {
+    const projectId = requireProject();
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
     try {
-      await api.patch(`/tasks/${subtaskId}/status`, { status: newStatus });
-      if (currentProject) {
-        await loadProjectDetail(currentProject.id);
-      }
-    } catch (err) {
-      console.error('Failed to update subtask status', err);
-      throw err;
+      for (const id of ids) await api.patch(`/tasks/${id}/status`, { status });
+    } finally {
+      // Read once, including when a later write failed after earlier tasks were saved.
+      if (selectedId.current === projectId && localStorage.getItem(AUTH_TOKEN_KEY) === token) await loadProjectDetail(projectId);
     }
-  };
-
-  const addNewRequirement = async (title: string, description: string, color: string) => {
-    if (!currentProject) return;
-    try {
-      await api.post(`/projects/${currentProject.id}/requirements`, {
-        title,
-        description,
-        color
-      });
-      await loadProjectDetail(currentProject.id);
-    } catch (err) {
-      console.error('Failed to add requirement', err);
-      throw err;
+  }, [requireProject, loadProjectDetail]);
+  const addNewRequirement = useCallback((title: string, description: string, color: string) => {
+    const id = requireProject();
+    if (!title.trim()) return Promise.reject(new Error('A requirement title is required.'));
+    return mutateProject(() => api.post(`/projects/${id}/requirements`, { title: title.trim(), description, color }));
+  }, [requireProject, mutateProject]);
+  const addNewSubtask = useCallback((requirementId: number, title: string, points: number, assigneeId?: number | null) => {
+    if (!title.trim() || !Number.isInteger(points) || points < 0) return Promise.reject(new Error('Enter a title and non-negative whole story points.'));
+    return mutateProject(() => api.post(`/requirements/${requirementId}/subtasks`, {
+      title: title.trim(), priority: 'MEDIUM', status: 'TODO', effortPoints: points,
+      estimatedHours: points * 4, assigneeId: assigneeId ?? null,
+    }));
+  }, [mutateProject]);
+  const createNewSprint = useCallback((objective: string, startDate: string, endDate: string, plannedStoryPoints: number, requirementIds: number[]) => {
+    const id = requireProject();
+    if (!objective.trim() || !startDate || !endDate || endDate < startDate || !requirementIds.length) {
+      return Promise.reject(new Error('Enter an objective, ordered sprint dates, and at least one requirement.'));
     }
-  };
-
-  const addNewSubtask = async (requirementId: number, title: string, storyPoints: number, assigneeId?: number | null) => {
-    try {
-      await api.post(`/requirements/${requirementId}/subtasks`, {
-        title,
-        description: `Subtask for requirement ${requirementId}`,
-        priority: 'MEDIUM',
-        status: 'TODO',
-        effortPoints: storyPoints,
-        estimatedHours: storyPoints * 4,
-        assigneeId: assigneeId || null
-      });
-      if (currentProject) {
-        await loadProjectDetail(currentProject.id);
-      }
-    } catch (err) {
-      console.error('Failed to add subtask', err);
-      throw err;
-    }
-  };
-
-  const createNewSprint = async (
-    objective: string,
-    startDate: string,
-    endDate: string,
-    plannedStoryPoints: number,
-    requirementIds: number[]
-  ) => {
-    if (!currentProject) return;
-    try {
-      await api.post(`/projects/${currentProject.id}/sprints`, {
-        sprintObjective: objective,
-        startDate,
-        endDate,
-        plannedStoryPoints,
-        requirementIds,
-        sprintStatus: 'ACTIVE'
-      });
-      await loadProjects(); // reload project lists
-      await loadProjectDetail(currentProject.id);
-    } catch (err) {
-      console.error('Failed to create sprint', err);
-      throw err;
-    }
-  };
-
-  const completeSprint = async (sprintId: number) => {
-    try {
-      await api.patch(`/sprints/${sprintId}/complete`);
-      if (currentProject) {
-        await loadProjectDetail(currentProject.id);
-      }
-    } catch (err) {
-      console.error('Failed to complete sprint', err);
-      throw err;
-    }
-  };
-
-  const createProject = async (name: string, description: string): Promise<Project> => {
-    try {
-      const today = new Date();
-      const nextYear = new Date();
-      nextYear.setFullYear(today.getFullYear() + 1);
-
-      const startDate = today.toISOString().split('T')[0];
-      const endDate = nextYear.toISOString().split('T')[0];
-
-      const res = await api.post<any>('/projects', {
-        name,
-        description,
-        startDate,
-        endDate,
-        status: 'PLANNED'
-      });
-      const newProj: Project = {
-        id: res.data.id,
-        name: res.data.name,
-        description: res.data.description
-      };
+    return mutateProject(() => api.post(`/projects/${id}/sprints`, {
+      sprintObjective: objective.trim(), startDate, endDate, plannedStoryPoints, requirementIds, sprintStatus: 'ACTIVE',
+    }));
+  }, [requireProject, mutateProject]);
+  const completeSprint = useCallback((id: number) => mutateProject(() => api.patch(`/sprints/${id}/complete`)), [mutateProject]);
+  const inviteMember = useCallback((email: string) => {
+    const id = requireProject();
+    return mutateProject(() => api.post(`/projects/${id}/members`, { email: email.trim() }));
+  }, [requireProject, mutateProject]);
+  const createProject = useCallback(async (name: string, description: string): Promise<Project> => {
+    if (!name.trim()) throw new Error('A project name is required.');
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const version = selectionVersion.current;
+    const today = new Date(); const nextYear = new Date(); nextYear.setFullYear(today.getFullYear() + 1);
+    const date = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    const { data } = await api.post<Project>('/projects', {
+      name: name.trim(), description, startDate: date(today), endDate: date(nextYear), status: 'PLANNED',
+    });
+    if (localStorage.getItem(AUTH_TOKEN_KEY) === token) {
       await loadProjects();
-      setCurrentProject(newProj);
-      return newProj;
-    } catch (err) {
-      console.error('Failed to create project', err);
-      throw err;
+      if (localStorage.getItem(AUTH_TOKEN_KEY) === token && selectionVersion.current === version) setCurrentProject(data);
     }
-  };
+    return data;
+  }, [loadProjects, setCurrentProject]);
 
-  const inviteMember = async (email: string) => {
-    if (!currentProject) return;
-    try {
-      await api.post(`/projects/${currentProject.id}/members`, { email });
-      await loadProjectDetail(currentProject.id);
-    } catch (err) {
-      console.error('Failed to invite member', err);
-      throw err;
-    }
-  };
-
-  return (
-    <SprintContext.Provider value={{
-      projects,
-      ownedProjects,
-      memberProjects,
-      currentProject,
-      setCurrentProject,
-      sprint,
-      loading,
-      members,
-      allProjectRequirements,
-      refreshData,
-      updateSubtaskStatus,
-      addNewRequirement,
-      addNewSubtask,
-      createNewSprint,
-      completeSprint,
-      createProject,
-      inviteMember
-    }}>
-      {children}
-    </SprintContext.Provider>
-  );
+  const value = useMemo(() => ({
+    projects, ownedProjects, memberProjects, currentProject, setCurrentProject, sprint, loading, error,
+    members, allProjectRequirements, refreshData, updateSubtaskStatus, updateSubtaskStatuses, addNewRequirement, addNewSubtask,
+    createNewSprint, completeSprint, createProject, inviteMember,
+  }), [projects, ownedProjects, memberProjects, currentProject, setCurrentProject, sprint, loading, error,
+    members, allProjectRequirements, refreshData, updateSubtaskStatus, updateSubtaskStatuses, addNewRequirement, addNewSubtask,
+    createNewSprint, completeSprint, createProject, inviteMember]);
+  return <SprintContext.Provider value={value}>{children}</SprintContext.Provider>;
 };
-
+// Remounting drops all account-specific state before another session renders it.
+export const SprintProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAuthenticated } = useAuth();
+  return <WorkspaceProvider key={isAuthenticated ? user?.id : 'signed-out'}>{children}</WorkspaceProvider>;
+};
+// eslint-disable-next-line react-refresh/only-export-components -- This hook shares the provider's private context.
 export const useSprint = () => {
   const context = useContext(SprintContext);
-  if (context === undefined) {
-    throw new Error('useSprint must be used within a SprintProvider');
-  }
+  if (!context) throw new Error('useSprint must be used within a SprintProvider');
   return context;
 };

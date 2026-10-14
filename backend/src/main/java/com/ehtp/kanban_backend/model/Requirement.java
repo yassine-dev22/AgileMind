@@ -2,18 +2,28 @@ package com.ehtp.kanban_backend.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import org.hibernate.annotations.BatchSize;
+
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 @Table(name = "requirements")
-@Data
-@EqualsAndHashCode(callSuper = false)
+@Getter
+@Setter
+@ToString(onlyExplicitlyIncluded = true)
+@BatchSize(size = 50)
+
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Requirement extends BaseAudit {
+    @Version
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    private long version;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
@@ -45,9 +55,10 @@ public class Requirement extends BaseAudit {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sprint_id", nullable = true)
-    @JsonIgnoreProperties({"requirements", "project", "tasks"})
+    @JsonIgnoreProperties({"requirements", "project", "tasks", "aiInsights"})
     private Sprint sprint;
 
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "requirement", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties("requirement")
     private List<Task> subtasks = new ArrayList<>();

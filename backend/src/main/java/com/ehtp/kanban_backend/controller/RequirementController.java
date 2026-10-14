@@ -7,6 +7,7 @@ import com.ehtp.kanban_backend.model.Task;
 import com.ehtp.kanban_backend.service.RequirementService;
 import com.ehtp.kanban_backend.service.TaskService;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -22,7 +23,7 @@ public class RequirementController {
     }
 
     @PostMapping
-    public Requirement createRequirement(@RequestBody RequirementRequestDTO dto) {
+    public Requirement createRequirement(@Valid @RequestBody RequirementRequestDTO dto) {
         return requirementService.createRequirement(dto);
     }
 
@@ -37,7 +38,7 @@ public class RequirementController {
     }
 
     @PutMapping("/{id}")
-    public Requirement updateRequirement(@PathVariable Long id, @RequestBody RequirementRequestDTO dto) {
+    public Requirement updateRequirement(@PathVariable Long id, @Valid @RequestBody RequirementRequestDTO dto) {
         return requirementService.updateRequirement(id, dto);
     }
 
@@ -47,7 +48,7 @@ public class RequirementController {
     }
 
     @PostMapping("/{requirementId}/subtasks")
-    public Task createSubtask(@PathVariable Long requirementId, @RequestBody TaskRequestDTO dto) {
+    public Task createSubtask(@PathVariable Long requirementId, @Valid @RequestBody TaskRequestDTO dto) {
         return taskService.createSubtask(requirementId, dto);
     }
 }

@@ -4,6 +4,7 @@ import com.ehtp.kanban_backend.dto.DecisionNoteRequestDTO;
 import com.ehtp.kanban_backend.model.DecisionNote;
 import com.ehtp.kanban_backend.service.DecisionNoteService;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -19,7 +20,7 @@ public class DecisionNoteController {
     @PostMapping
     public DecisionNote createDecisionNote(
             @PathVariable Long taskId,
-            @RequestBody DecisionNoteRequestDTO dto
+            @Valid @RequestBody DecisionNoteRequestDTO dto
     ) {
         return decisionNoteService.createDecisionNote(taskId, dto);
     }

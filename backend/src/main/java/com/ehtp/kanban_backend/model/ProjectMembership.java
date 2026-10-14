@@ -2,15 +2,21 @@ package com.ehtp.kanban_backend.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import org.hibernate.annotations.BatchSize;
+
 
 @Entity
 @Table(name = "project_memberships", uniqueConstraints = {
         @UniqueConstraint(columnNames = {"user_id", "project_id"})
 })
-@Data
-@EqualsAndHashCode(callSuper = false)
+@Getter
+@Setter
+@ToString(onlyExplicitlyIncluded = true)
+@BatchSize(size = 50)
+
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ProjectMembership extends BaseAudit {
     @Id

@@ -13,26 +13,28 @@ public class WorkloadCalculator implements MetricCalculator {
         Map<Long, User> users = new LinkedHashMap<>();
         if (sprint.getProject() != null && sprint.getProject().getMembers() != null) {
             for (User member : sprint.getProject().getMembers()) {
-                users.put(member.getId(), member);
+                if (member.getRole() != User.Role.VIEWER) users.put(member.getId(), member);
             }
         }
         for (Task task : tasks) {
-            if (task.getAssignee() != null) {
+            if (task.getAssignee() != null && task.getAssignee().getRole() != User.Role.VIEWER) {
                 users.put(task.getAssignee().getId(), task.getAssignee());
             }
         }
 
         List<WorkloadDTO> workloads = new ArrayList<>();
+        Map<Long, int[]> totals = new HashMap<>();
+        for (Task task : tasks) {
+            if (task.getAssignee() == null) continue;
+            int[] counts = totals.computeIfAbsent(task.getAssignee().getId(), ignored -> new int[2]);
+            int points = task.getEffortPoints() == null ? 0 : task.getEffortPoints();
+            counts[0] += points;
+            if (task.getStatus() == Task.TaskStatus.DONE) counts[1] += points;
+        }
         for (User user : users.values()) {
-            List<Task> assignedTasks = tasks.stream()
-                    .filter(task -> task.getAssignee() != null && task.getAssignee().getId() == user.getId())
-                    .toList();
-            int assigned = assignedTasks.stream().map(Task::getEffortPoints).mapToInt(p -> p == null ? 0 : p).sum();
-            int completed = assignedTasks.stream()
-                    .filter(task -> task.getStatus() == Task.TaskStatus.DONE)
-                    .map(Task::getEffortPoints)
-                    .mapToInt(p -> p == null ? 0 : p)
-                    .sum();
+            int[] counts = totals.getOrDefault(user.getId(), new int[2]);
+            int assigned = counts[0];
+            int completed = counts[1];
             int remaining = assigned - completed;
             int capacity = user.getCapacityPoints() == null ? 0 : user.getCapacityPoints();
             double loadRatio = capacity <= 0 ? (assigned > 0 ? 999.0 : 0.0) : (double) assigned / capacity;

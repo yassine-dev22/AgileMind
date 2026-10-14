@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api/axios';
+import api, { getErrorMessage } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import { Loader2, Mail, Lock, User as UserIcon, Building2 } from 'lucide-react';
-
-const SKILLS = ['Frontend', 'Backend', 'UI/UX Designer', 'DevOps', 'QA'];
+import { Loader2, Mail, Lock, User as UserIcon } from 'lucide-react';
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({ 
@@ -13,8 +11,6 @@ const Register: React.FC = () => {
     email: '', 
     password: '', 
     confirmPassword: '',
-    organizationName: '',
-    skills: [] as string[]
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,17 +18,9 @@ const Register: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const handleSkillToggle = (skill: string) => {
-    setFormData(prev => ({
-      ...prev,
-      skills: prev.skills.includes(skill)
-        ? prev.skills.filter(s => s !== skill)
-        : [...prev.skills, skill]
-    }));
-  };
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError('');
     
@@ -41,21 +29,26 @@ const Register: React.FC = () => {
       setLoading(false);
       return;
     }
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      setError('First and last names are required.'); setLoading(false); return;
+    }
+    if (new TextEncoder().encode(formData.password).length > 72) {
+      setError('Password must fit within 72 UTF-8 bytes.'); setLoading(false); return;
+    }
 
     try {
       const response = await api.post('/auth/register', {
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        fullName: `${formData.firstName} ${formData.lastName}`,
-        role: 'OWNER',
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        fullName: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
         capacityPoints: 40
       });
       login(response.data.token, response.data.user);
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Registration failed. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -70,7 +63,7 @@ const Register: React.FC = () => {
         <div className="relative z-10">
           <div className="flex flex-col items-center mb-8">
             <h2 className="text-2xl font-bold text-slate-100 mb-2">Create an Account</h2>
-            <p className="text-slate-400 text-sm">Join LevelUP today</p>
+            <p className="text-slate-400 text-sm">Join AgileMind today</p>
           </div>
 
           <form onSubmit={handleRegister} className="space-y-4">
@@ -129,22 +122,6 @@ const Register: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-slate-300">Organization Name</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Building2 size={18} className="text-slate-500" />
-                </div>
-                <input
-                  type="text"
-                  value={formData.organizationName}
-                  onChange={(e) => setFormData({...formData, organizationName: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-700 text-slate-100 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-2.5 outline-none"
-                  required
-                />
-              </div>
-            </div>
-
             <div className="flex gap-4">
               <div className="space-y-1 w-1/2">
                 <label className="text-sm font-medium text-slate-300">Password</label>
@@ -176,26 +153,6 @@ const Register: React.FC = () => {
                     required
                   />
                 </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 pt-2">
-              <label className="text-sm font-medium text-slate-300">Your Skills</label>
-              <div className="flex flex-wrap gap-2">
-                {SKILLS.map(skill => (
-                  <button
-                    key={skill}
-                    type="button"
-                    onClick={() => handleSkillToggle(skill)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                      formData.skills.includes(skill)
-                        ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'
-                    }`}
-                  >
-                    {skill}
-                  </button>
-                ))}
               </div>
             </div>
 

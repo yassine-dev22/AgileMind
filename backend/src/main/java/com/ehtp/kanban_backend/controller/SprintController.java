@@ -4,6 +4,7 @@ import com.ehtp.kanban_backend.dto.SprintRequestDTO;
 import com.ehtp.kanban_backend.model.Sprint;
 import com.ehtp.kanban_backend.service.SprintService;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -18,7 +19,7 @@ public class SprintController {
     }
 
     @PostMapping
-    public Sprint createSprint(@RequestBody SprintRequestDTO dto) {
+    public Sprint createSprint(@Valid @RequestBody SprintRequestDTO dto) {
         return sprintService.createSprint(dto);
     }
 
@@ -38,7 +39,7 @@ public class SprintController {
     }
 
     @PutMapping("/{id}")
-    public Sprint updateSprint(@PathVariable Long id, @RequestBody SprintRequestDTO dto) {
+    public Sprint updateSprint(@PathVariable Long id, @Valid @RequestBody SprintRequestDTO dto) {
         return sprintService.updateSprint(id, dto);
     }
 

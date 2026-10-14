@@ -1,6 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSprint } from '../context/SprintContext';
+import type { Subtask, TaskStatus } from '../context/SprintContext';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../api/axios';
+import { buildBurndownData } from '../utils/metrics';
 import {
   Plus,
   ArrowRight,
@@ -43,10 +46,12 @@ export const Dashboard: React.FC = () => {
     setCurrentProject,
     sprint,
     loading,
+    error,
     members,
     allProjectRequirements,
     refreshData,
     updateSubtaskStatus,
+    updateSubtaskStatuses,
     addNewRequirement,
     addNewSubtask,
     createNewSprint,
@@ -69,6 +74,10 @@ export const Dashboard: React.FC = () => {
   const [newReqDesc, setNewReqDesc] = useState('');
   const [newReqColor, setNewReqColor] = useState('#6366F1');
   const [isAddingReq, setIsAddingReq] = useState(false);
+  const [isReqFormOpen, setIsReqFormOpen] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [isUpdatingTasks, setIsUpdatingTasks] = useState(false);
+  const [isCompletingSprint, setIsCompletingSprint] = useState(false);
 
   const [activeReqForSubtask, setActiveReqForSubtask] = useState<number | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
@@ -101,6 +110,8 @@ export const Dashboard: React.FC = () => {
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjName.trim() || !newProjDesc.trim()) return;
+    if (isCreatingProj) return;
+    setOperationError(null);
     setIsCreatingProj(true);
     try {
       await createProject(newProjName.trim(), newProjDesc.trim());
@@ -108,7 +119,7 @@ export const Dashboard: React.FC = () => {
       setNewProjDesc('');
       setIsCreateProjOpen(false);
     } catch (err) {
-      console.error(err);
+      setOperationError(getErrorMessage(err, 'Failed to create the project.'));
     } finally {
       setIsCreatingProj(false);
     }
@@ -117,14 +128,17 @@ export const Dashboard: React.FC = () => {
   const handleAddRequirement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newReqTitle.trim()) return;
+    if (isAddingReq) return;
+    setOperationError(null);
     setIsAddingReq(true);
     try {
       await addNewRequirement(newReqTitle.trim(), newReqDesc.trim(), newReqColor);
       setNewReqTitle('');
       setNewReqDesc('');
       setNewReqColor('#6366F1');
+      setIsReqFormOpen(false);
     } catch (err) {
-      console.error(err);
+      setOperationError(getErrorMessage(err, 'Failed to add the requirement.'));
     } finally {
       setIsAddingReq(false);
     }
@@ -133,6 +147,8 @@ export const Dashboard: React.FC = () => {
   const handleAddSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubtaskTitle.trim() || activeReqForSubtask === null) return;
+    if (isAddingSubtask) return;
+    setOperationError(null);
     setIsAddingSubtask(true);
     try {
       await addNewSubtask(
@@ -146,7 +162,7 @@ export const Dashboard: React.FC = () => {
       setNewSubtaskAssignee('');
       setActiveReqForSubtask(null);
     } catch (err) {
-      console.error(err);
+      setOperationError(getErrorMessage(err, 'Failed to add the subtask.'));
     } finally {
       setIsAddingSubtask(false);
     }
@@ -155,6 +171,9 @@ export const Dashboard: React.FC = () => {
   const handleInitializeSprint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sprintObjective.trim() || !sprintStart || !sprintEnd || selectedReqIds.length === 0) return;
+    if (isCreatingSprint) return;
+    setOperationError(null);
+    if (sprintEnd < sprintStart) { setOperationError('Sprint end date must be on or after its start date.'); return; }
     setIsCreatingSprint(true);
     // Calculate total SP of selected requirements
     const totalSelectedSP = allProjectRequirements
@@ -175,7 +194,7 @@ export const Dashboard: React.FC = () => {
       setSelectedReqIds([]);
       setActiveTab('A'); // Switch back to board
     } catch (err) {
-      console.error(err);
+      setOperationError(getErrorMessage(err, 'Failed to initialize the sprint.'));
     } finally {
       setIsCreatingSprint(false);
     }
@@ -184,15 +203,16 @@ export const Dashboard: React.FC = () => {
   const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
+    if (isInviting) return;
     setIsInviting(true);
     setInviteMsg(null);
     try {
       await inviteMember(inviteEmail.trim());
       setInviteMsg({ text: `Successfully invited ${inviteEmail}!`, type: 'success' });
       setInviteEmail('');
-    } catch (err: any) {
+    } catch (err) {
       setInviteMsg({
-        text: err.response?.data?.message || 'Failed to invite member. Please check if the user is registered.',
+        text: getErrorMessage(err, 'Failed to invite member. Please check if the user is registered.'),
         type: 'error'
       });
     } finally {
@@ -202,46 +222,36 @@ export const Dashboard: React.FC = () => {
 
   // Toggle checklist status of task from Tab B backlog tree
   const handleToggleSubtaskCheckbox = async (subtaskId: number, currentStatus: string) => {
+    if (isUpdatingTasks) return;
+    setIsUpdatingTasks(true); setOperationError(null);
     const nextStatus = currentStatus === 'DONE' ? 'TODO' : 'DONE';
-    await updateSubtaskStatus(subtaskId, nextStatus);
+    try { await updateSubtaskStatus(subtaskId, nextStatus); }
+    catch (err) { setOperationError(getErrorMessage(err, 'Failed to update the task.')); }
+    finally { setIsUpdatingTasks(false); }
   };
 
   // Toggle all subtasks of a requirement from Tab B tree
-  const handleToggleRequirementCheckbox = async (_reqId: number, reqTasks: any[]) => {
-    if (reqTasks.length === 0) return;
-    const allDone = reqTasks.every((t: any) => t.status === 'DONE');
+  const handleToggleRequirementCheckbox = async (_reqId: number, reqTasks: Subtask[]) => {
+    if (reqTasks.length === 0 || isUpdatingTasks) return;
+    setIsUpdatingTasks(true); setOperationError(null);
+    const allDone = reqTasks.every(t => t.status === 'DONE');
     const targetStatus = allDone ? 'TODO' : 'DONE';
-    for (const t of reqTasks) {
-      if (t.status !== targetStatus) {
-        await updateSubtaskStatus(t.id, targetStatus);
-      }
-    }
+    try {
+      await updateSubtaskStatuses(reqTasks.filter(task => task.status !== targetStatus).map(task => task.id), targetStatus);
+    } catch (err) { setOperationError(getErrorMessage(err, 'Some tasks could not be updated. The board shows the saved statuses.')); }
+    finally { setIsUpdatingTasks(false); }
+  };
+
+  const handleCompleteSprint = async () => {
+    if (!sprint || isCompletingSprint) return;
+    setIsCompletingSprint(true); setOperationError(null);
+    try { await completeSprint(sprint.id); }
+    catch (err) { setOperationError(getErrorMessage(err, 'Failed to conclude the sprint.')); }
+    finally { setIsCompletingSprint(false); }
   };
 
   // Burn-down calculations for Tab C
-  const burndownData = useMemo(() => {
-    if (!sprint) return [];
-    const days = 10;
-    const totalSP = sprint.subtasks.reduce((sum, t) => sum + t.effortPoints, 0);
-    const data = [];
-    
-    // Spread done tasks across the timeframe for actual burndown line
-    const doneTasks = [...sprint.subtasks.filter(t => t.status === 'DONE')];
-    const totalDoneSP = doneTasks.reduce((sum, t) => sum + t.effortPoints, 0);
-
-    for (let i = 0; i <= days; i++) {
-      const ideal = Math.max(0, parseFloat((totalSP - (totalSP / days) * i).toFixed(1)));
-      // Simulated curve towards the real final value
-      const percentComplete = Math.min(1, i / days);
-      const actualRemaining = totalSP - (totalDoneSP * percentComplete);
-      data.push({
-        day: `Day ${i}`,
-        Ideal: ideal,
-        Actual: i === days ? (totalSP - totalDoneSP) : Math.round(actualRemaining)
-      });
-    }
-    return data;
-  }, [sprint]);
+  const burndownData = useMemo(() => buildBurndownData(sprint), [sprint]);
 
   // Point Distribution Calculations
   const distributionData = useMemo(() => {
@@ -257,25 +267,11 @@ export const Dashboard: React.FC = () => {
     ];
   }, [sprint]);
 
-  // Expand newly added requirements in state
-  useEffect(() => {
-    if (allProjectRequirements.length > 0) {
-      setExpandedReqs(prev => {
-        const next = { ...prev };
-        allProjectRequirements.forEach(r => {
-          if (next[r.id] === undefined) {
-            next[r.id] = false;
-          }
-        });
-        return next;
-      });
-    }
-  }, [allProjectRequirements]);
-
   // Render View 1: Homepage Dashboard
   if (!currentProject) {
     return (
       <div className="max-w-7xl mx-auto space-y-10 animate-fade-in">
+        {(operationError || error) && <p role="alert" className="text-sm text-red-400">{operationError || error}</p>}
         {/* Profile Card Header */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden shadow-xl">
           <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none"></div>
@@ -492,11 +488,13 @@ export const Dashboard: React.FC = () => {
   }
 
   // Determine user role relative to current project
-  const isProjOwner = currentProject.owner?.id === user?.id || user?.role === 'OWNER';
+  const isProjOwner = user?.role !== 'VIEWER' && currentProject.owner?.id === user?.id;
+  const canEditTasks = user?.role !== 'VIEWER' && !isUpdatingTasks;
 
   // Render View 2: Project Workspace View
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
+      {(operationError || error) && <p role="alert" className="text-sm text-red-400">{operationError || error}</p>}
       {/* Workspace Header */}
       <div className="bg-[#1E293B] border border-slate-700/60 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md">
         <div className="space-y-1">
@@ -583,7 +581,7 @@ export const Dashboard: React.FC = () => {
                     <h3 className="text-sm font-bold text-slate-200">Requirements Backlog Tree</h3>
                     {isProjOwner && (
                       <button
-                        onClick={() => setIsAddingReq(true)}
+                        onClick={() => setIsReqFormOpen(true)}
                         className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
                       >
                         <Plus size={14} /> Add Requirement
@@ -592,11 +590,11 @@ export const Dashboard: React.FC = () => {
                   </div>
 
                   {/* Add Requirement Form inline overlay */}
-                  {isAddingReq && (
+                  {isReqFormOpen && (
                     <form onSubmit={handleAddRequirement} className="bg-[#1E293B] border border-slate-700/60 p-4 rounded-xl space-y-3 animate-fade-in">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-bold text-slate-300">Add New Requirement (Epic)</span>
-                        <button type="button" onClick={() => setIsAddingReq(false)} className="text-slate-400 text-xs">✕</button>
+                        <button type="button" onClick={() => setIsReqFormOpen(false)} className="text-slate-400 text-xs">✕</button>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-1">
@@ -638,13 +636,14 @@ export const Dashboard: React.FC = () => {
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => setIsAddingReq(false)}
+                          onClick={() => setIsReqFormOpen(false)}
                           className="px-3 py-1.5 text-[10px] text-slate-400 hover:bg-slate-800 rounded transition-colors"
                         >
                           Cancel
                         </button>
                         <button
                           type="submit"
+                          disabled={isAddingReq}
                           className="bg-indigo-600 hover:bg-indigo-500 text-white rounded px-3 py-1.5 text-[10px] font-semibold"
                         >
                           Save Epic
@@ -668,6 +667,7 @@ export const Dashboard: React.FC = () => {
                               <input
                                 type="checkbox"
                                 checked={allDone}
+                                disabled={!canEditTasks || (!!req.sprintId && req.sprintId !== sprint?.id)}
                                 onChange={() => handleToggleRequirementCheckbox(req.id, reqTasks)}
                                 className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4 bg-slate-950 shrink-0"
                               />
@@ -697,7 +697,7 @@ export const Dashboard: React.FC = () => {
                                   Backlog
                                 </span>
                               )}
-                              {isProjOwner && (
+                              {isProjOwner && (!req.sprintId || req.sprintId === sprint?.id) && (
                                 <button
                                   onClick={() => setActiveReqForSubtask(req.id)}
                                   className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold"
@@ -717,6 +717,7 @@ export const Dashboard: React.FC = () => {
                                     <input
                                       type="checkbox"
                                       checked={task.status === 'DONE'}
+                                      disabled={!canEditTasks || (!!req.sprintId && req.sprintId !== sprint?.id)}
                                       onChange={() => handleToggleSubtaskCheckbox(task.id, task.status)}
                                       className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5 bg-slate-950 shrink-0"
                                     />
@@ -777,7 +778,9 @@ export const Dashboard: React.FC = () => {
                       </p>
                       {isProjOwner && (
                         <button
-                          onClick={() => completeSprint(sprint.id)}
+                          onClick={handleCompleteSprint}
+                          disabled={isCompletingSprint || sprint.subtasks.some(task => task.status !== 'DONE')}
+                          title={sprint.subtasks.some(task => task.status !== 'DONE') ? 'Complete all sprint tasks before concluding the sprint.' : undefined}
                           className="w-full mt-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 py-2 rounded-lg text-xs font-semibold transition-colors"
                         >
                           Conclude Active Sprint
@@ -819,6 +822,7 @@ export const Dashboard: React.FC = () => {
                             type="date"
                             required
                             value={sprintEnd}
+                            min={sprintStart || undefined}
                             onChange={e => setSprintEnd(e.target.value)}
                             className="w-full bg-slate-950 border border-slate-750 text-slate-100 text-xs rounded-lg p-2 outline-none focus:border-indigo-500 cursor-pointer"
                           />
@@ -907,7 +911,7 @@ export const Dashboard: React.FC = () => {
                             className="w-full bg-slate-950 border border-slate-750 text-slate-100 text-xs rounded-lg p-2.5 outline-none focus:border-indigo-500 cursor-pointer"
                           >
                             <option value="">Unassigned</option>
-                            {members.map(m => (
+                            {members.filter(member => member.role !== 'VIEWER').map(m => (
                               <option key={m.id} value={m.id}>
                                 {m.fullName}
                               </option>
@@ -1014,23 +1018,20 @@ export const Dashboard: React.FC = () => {
                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sprint Health Score</h4>
                       
                       <div className="relative w-40 h-40 flex items-center justify-center">
-                        {/* Circular track border */}
-                        <div className="absolute inset-0 rounded-full border-[10px] border-slate-800"></div>
-                        {/* Interactive glow score circle */}
-                        <div
-                          className="absolute inset-0 rounded-full border-[10px] border-transparent border-t-indigo-500 border-r-indigo-500 transition-all duration-1000"
-                          style={{
-                            transform: `rotate(${Math.min(360, (sprint.healthScore / 100) * 360 - 90)}deg)`
-                          }}
-                        ></div>
+                        <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 160 160" aria-hidden="true">
+                          <circle cx="80" cy="80" r="70" fill="none" stroke="#1e293b" strokeWidth="10" />
+                          <circle cx="80" cy="80" r="70" fill="none" stroke="#6366f1" strokeWidth="10"
+                            strokeDasharray={2 * Math.PI * 70}
+                            strokeDashoffset={2 * Math.PI * 70 * (1 - Math.max(0, Math.min(100, sprint.healthScore ?? 0)) / 100)} />
+                        </svg>
                         <div className="flex flex-col items-center justify-center">
-                          <span className="text-4xl font-extrabold text-slate-100">{sprint.healthScore}%</span>
+                          <span className="text-4xl font-extrabold text-slate-100">{sprint.healthScore === null ? '—' : `${sprint.healthScore}%`}</span>
                           <span className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Stability Rating</span>
                         </div>
                       </div>
 
                       <p className="text-xs text-slate-450 leading-relaxed max-w-[220px]">
-                        {sprint.healthScore >= 80
+                        {sprint.healthScore === null ? 'Health metrics are unavailable. Refresh the workspace to try again.' : sprint.healthScore >= 80
                           ? 'Excellent. Task allocation is balanced, and delivery trajectory looks stable.'
                           : sprint.healthScore >= 50
                           ? 'Moderate Risk. Minor bottlenecks and slight story point variance observed.'
@@ -1075,7 +1076,7 @@ export const Dashboard: React.FC = () => {
 
                           {sprint.insights.length === 0 && (
                             <div className="text-xs text-slate-500 italic p-4 bg-slate-950/60 rounded-xl text-center">
-                              No active risks detected. Sprint velocity is nominal.
+                              {sprint.insightsAvailable ? 'No AI insights have been recorded for this sprint.' : 'AI insights are unavailable. Refresh the workspace to try again.'}
                             </div>
                           )}
                         </div>
@@ -1085,8 +1086,7 @@ export const Dashboard: React.FC = () => {
                       <div className="pt-4 border-t border-slate-800/80 space-y-3">
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">n8n Standup Automation Sync</h4>
                         <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-mono">
-                          {sprint.insights[0]?.automatedStandupSummary || 
-                            `LEVELUP STANDUP SUMMARY AUTOMATION (n8n node ID: sprint-${sprint.id})\n------------------------------------------------------------\n* Done tasks: ${sprint.subtasks.filter(t => t.status === 'DONE').length} tasks completed successfully.\n* In progress: ${sprint.subtasks.filter(t => t.status === 'IN_PROGRESS').length} items currently locked in development.\n* Next items: backlogs queue has ${sprint.subtasks.filter(t => t.status === 'TODO').length} tasks.\n\nAI Standup Assessment:\nSprint velocity is running at 94% alignment. Daily standup checklist generated automatically by the pipeline node.`}
+                          {sprint.insights.find(insight => insight.automatedStandupSummary)?.automatedStandupSummary || 'No automated standup summary has been received for this sprint.'}
                         </div>
                       </div>
                     </div>
@@ -1109,11 +1109,11 @@ export const Dashboard: React.FC = () => {
               <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
                 <h3 className="text-sm font-bold text-slate-200">Active Workspace Contributors</h3>
                 <div className="divide-y divide-slate-800">
-                  {members.map(m => {
+                  {members.filter(member => member.role !== 'VIEWER').map(m => {
                     const isExpanded = !!expandedMembers[m.id];
                     
                     // Filter tasks assigned to this member in active sprint and requirements backlog
-                    const userTasks: any[] = [];
+                    const userTasks: Subtask[] = [];
                     const taskIds = new Set<number>();
                     
                     if (sprint?.subtasks) {
@@ -1127,7 +1127,7 @@ export const Dashboard: React.FC = () => {
                     
                     allProjectRequirements?.forEach(r => {
                       r.tasks?.forEach(t => {
-                        if ((t.assignee?.id === m.id || t.assigneeId === m.id) && !taskIds.has(t.id)) {
+                        if (!r.sprintId && (t.assignee?.id === m.id || t.assigneeId === m.id) && !taskIds.has(t.id)) {
                           userTasks.push(t);
                           taskIds.add(t.id);
                         }
@@ -1136,7 +1136,8 @@ export const Dashboard: React.FC = () => {
                     
                     const totalPoints = userTasks.reduce((sum, t) => sum + (t.effortPoints || 0), 0);
                     const doneTasks = userTasks.filter(t => t.status === 'DONE');
-                    const progressPercentage = m.capacityPoints > 0 ? Math.min(100, Math.round((totalPoints / m.capacityPoints) * 100)) : 0;
+                    const progressPercentage = m.capacityPoints > 0 ? Math.round((totalPoints / m.capacityPoints) * 100) : totalPoints > 0 ? 100 : 0;
+                    const isOverCapacity = totalPoints > m.capacityPoints;
                     
                     return (
                       <div key={m.id} className="border-b border-slate-800 last:border-b-0 py-2.5">
@@ -1179,7 +1180,7 @@ export const Dashboard: React.FC = () => {
                               <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
                                 <div
                                   className={`h-full rounded-full transition-all duration-500 ${
-                                    progressPercentage > 100
+                                    isOverCapacity
                                       ? 'bg-rose-500'
                                       : progressPercentage > 80
                                       ? 'bg-amber-500'
@@ -1246,9 +1247,15 @@ export const Dashboard: React.FC = () => {
                       </div>
                     );
                   })}
-                  {members.length === 0 && (
+                  {members.filter(member => member.role !== 'VIEWER').length === 0 && (
                     <p className="text-xs text-slate-500 italic text-center py-4">No team contributors added yet.</p>
                   )}
+                  {members.filter(member => member.role === 'VIEWER').map(member => (
+                    <div key={member.id} className="py-3 text-xs text-slate-400 flex items-center justify-between">
+                      <span>{member.fullName} <span className="text-slate-500">({member.email})</span></span>
+                      <span className="text-[10px] uppercase">Viewer · read-only access</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 

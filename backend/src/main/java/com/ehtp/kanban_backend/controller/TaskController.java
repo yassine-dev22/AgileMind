@@ -7,6 +7,7 @@ import com.ehtp.kanban_backend.dto.TaskStatusUpdateDTO;
 import com.ehtp.kanban_backend.model.Task;
 import com.ehtp.kanban_backend.service.TaskService;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -20,7 +21,7 @@ public class TaskController {
     }
 
     @PostMapping
-    public Task createTask(@RequestBody TaskRequestDTO dto) {
+    public Task createTask(@Valid @RequestBody TaskRequestDTO dto) {
         return taskService.createTask(dto);
     }
 
@@ -38,17 +39,17 @@ public class TaskController {
     }
 
     @PutMapping("/{id}")
-    public Task updateTask(@PathVariable Long id, @RequestBody TaskRequestDTO dto) {
+    public Task updateTask(@PathVariable Long id, @Valid @RequestBody TaskRequestDTO dto) {
         return taskService.updateTask(id, dto);
     }
 
     @PatchMapping("/{id}/status")
-    public Task updateTaskStatus(@PathVariable Long id, @RequestBody TaskStatusUpdateDTO dto) {
+    public Task updateTaskStatus(@PathVariable Long id, @Valid @RequestBody TaskStatusUpdateDTO dto) {
         return taskService.updateStatus(id, dto);
     }
 
     @PostMapping("/{id}/assign")
-    public TaskAssignmentResponseDTO assignTask(@PathVariable Long id, @RequestBody TaskAssignmentDTO dto) {
+    public TaskAssignmentResponseDTO assignTask(@PathVariable Long id, @Valid @RequestBody TaskAssignmentDTO dto) {
         return taskService.assignTask(id, dto);
     }
 

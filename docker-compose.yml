@@ -5,9 +5,9 @@ services:
     environment:
       POSTGRES_DB: levelup
       POSTGRES_USER: ${DB_USERNAME:-levelup}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-levelup}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     ports:
-      - "55432:5432"
+      - "127.0.0.1:55432:5432"
     volumes:
       - levelup-postgres-data:/var/lib/postgresql/data
 

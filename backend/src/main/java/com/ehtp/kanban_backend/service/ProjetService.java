@@ -14,6 +14,7 @@ import com.ehtp.kanban_backend.repository.TaskRepository;
 import com.ehtp.kanban_backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@Transactional
 public class ProjetService {
 
     private final ProjetRepository projetRepository;
@@ -28,23 +30,29 @@ public class ProjetService {
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
     private final AuthorizationService authorizationService;
+    private final ProjectMutationGuard mutationGuard;
 
     public ProjetService(
             ProjetRepository projetRepository,
             SprintRepository sprintRepository,
             TaskRepository taskRepository,
             UserRepository userRepository,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            ProjectMutationGuard mutationGuard
     ) {
         this.projetRepository = projetRepository;
         this.sprintRepository = sprintRepository;
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
         this.authorizationService = authorizationService;
+        this.mutationGuard = mutationGuard;
     }
 
     public Projet createProjet(ProjectRequestDTO dto) {
         User creator = authorizationService.currentUser();
+        if (creator.getRole() == User.Role.VIEWER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "A viewer cannot create projects");
+        }
         Projet projet = new Projet();
         projet.setOwner(creator);
         if (projet.getMembers() == null) {
@@ -55,22 +63,23 @@ public class ProjetService {
         return projetRepository.save(projet);
     }
 
+    @Transactional(readOnly = true)
     public List<Projet> getAllProjets() {
         User user = authorizationService.currentUser();
         return projetRepository.findDistinctByOwnerIdOrMembersId(user.getId(), user.getId());
     }
 
+    @Transactional(readOnly = true)
     public Projet getProjetById(Long id) {
-        return projetRepository.findById(id)
+        Projet project = projetRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Projet not found"));
+        authorizationService.requireProjectViewer(id);
+        return project;
     }
 
     public Projet updateProjet(Long id, ProjectRequestDTO updatedProjet) {
-        Projet projet = getProjetById(id);
-        User currentUser = authorizationService.currentUser();
-        if (projet.getOwner().getId() != currentUser.getId()) {
-            throw new org.springframework.security.access.AccessDeniedException("User is not the owner of this project");
-        }
+        authorizationService.requireProjectOwner(id);
+        Projet projet = mutationGuard.lock(id);
 
         applyProjectFields(projet, updatedProjet);
 
@@ -78,14 +87,12 @@ public class ProjetService {
     }
 
     public void deleteProjet(Long id) {
-        Projet projet = getProjetById(id);
-        User currentUser = authorizationService.currentUser();
-        if (projet.getOwner().getId() != currentUser.getId()) {
-            throw new org.springframework.security.access.AccessDeniedException("User is not the owner of this project");
-        }
+        authorizationService.requireProjectOwner(id);
+        Projet projet = mutationGuard.lock(id);
         projetRepository.delete(projet);
     }
 
+    @Transactional(readOnly = true)
     public ProjectDetailDTO getProjectDetail(Long id) {
         Projet project = getProjetById(id);
         Sprint activeSprint = sprintRepository.findByProjectIdAndIsActive(id, true)
@@ -96,27 +103,31 @@ public class ProjetService {
     }
 
     public Projet inviteMember(Long projectId, String email) {
-        Projet project = getProjetById(projectId);
-        User currentUser = authorizationService.currentUser();
-        if (project.getOwner().getId() != currentUser.getId()) {
-            throw new org.springframework.security.access.AccessDeniedException("User is not the owner of this project");
+        authorizationService.requireProjectOwner(projectId);
+        Projet project = mutationGuard.lock(projectId);
+        if (email == null || email.isBlank() || email.length() > 254) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid email is required");
         }
 
-        User invitee = userRepository.findByEmail(email.trim().toLowerCase())
+        User invitee = userRepository.findByEmail(email.trim().toLowerCase(java.util.Locale.ROOT))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User with email " + email + " not found"));
 
-        if (!project.getMembers().contains(invitee)) {
+        if (project.getMembers().stream().noneMatch(member -> member.getId() == invitee.getId())) {
             project.getMembers().add(invitee);
         }
 
         return projetRepository.save(project);
     }
 
+    @Transactional(readOnly = true)
     public DigestResponseDTO getDigest(Long projectId, int hours) {
         getProjetById(projectId);
-        int safeHours = hours <= 0 ? 24 : hours;
+        if (hours <= 0 || hours > 8760) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "hours must be between 1 and 8760");
+        }
+        int safeHours = hours;
         LocalDateTime since = LocalDateTime.now().minusHours(safeHours);
-        List<Task> changedTasks = taskRepository.findBySprintProjectIdAndUpdatedAtAfter(projectId, since);
+        List<Task> changedTasks = taskRepository.findByRequirementProjectIdAndUpdatedAtAfter(projectId, since);
         List<String> highlights = new ArrayList<>();
 
         for (Task task : changedTasks) {
@@ -141,7 +152,7 @@ public class ProjetService {
     }
 
     private void validateProjectRequest(ProjectRequestDTO dto) {
-        if (dto.getName() == null || dto.getName().isBlank()) {
+        if (dto.getName() == null || dto.getName().isBlank() || dto.getName().length() > 255) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required");
         }
         if (dto.getStartDate() == null || dto.getEndDate() == null || !dto.getStartDate().isBefore(dto.getEndDate())) {

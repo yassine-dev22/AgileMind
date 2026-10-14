@@ -103,11 +103,7 @@ public class AiService {
         Optional<WorkloadDTO> overloaded = workload.stream()
                 .filter(WorkloadDTO::over120Percent)
                 .max(Comparator.comparing(WorkloadDTO::loadRatio));
-        Optional<WorkloadDTO> available = workload.stream()
-                .filter(user -> !user.overCapacity())
-                .min(Comparator.comparing(WorkloadDTO::loadRatio));
-
-        if (overloaded.isEmpty() || available.isEmpty()) {
+        if (overloaded.isEmpty()) {
             return new ReassignmentSuggestionsDTO(
                     List.of(),
                     "No clear reassignment is recommended from the current workload distribution.",
@@ -116,17 +112,25 @@ public class AiService {
         }
 
         WorkloadDTO source = overloaded.get();
-        WorkloadDTO target = available.get();
-        Optional<Task> candidate = tasks.stream()
+        Optional<MoveCandidate> candidate = tasks.stream()
                 .filter(task -> task.getAssignee() != null && task.getAssignee().getId() == source.userId())
                 .filter(task -> task.getStatus() != Task.TaskStatus.DONE)
-                .max(Comparator.comparing(Task::getEffortPoints));
+                .filter(task -> task.getEffortPoints() != null && task.getEffortPoints() > 0)
+                .sorted(Comparator.comparing(Task::getEffortPoints).reversed())
+                .flatMap(task -> workload.stream()
+                        .filter(user -> !java.util.Objects.equals(user.userId(), source.userId()))
+                        .filter(user -> !user.overCapacity() && user.capacityPoints() != null && user.assignedPoints() != null)
+                        .filter(user -> (long) user.capacityPoints() - user.assignedPoints() >= task.getEffortPoints())
+                        .min(Comparator.comparing(WorkloadDTO::loadRatio))
+                        .map(user -> new MoveCandidate(task, user)).stream())
+                .findFirst();
 
         if (candidate.isEmpty()) {
-            return new ReassignmentSuggestionsDTO(List.of(), "The overloaded member has no movable active task.", 0);
+            return new ReassignmentSuggestionsDTO(List.of(), "No active task fits within another member's spare capacity.", 0);
         }
 
-        Task task = candidate.get();
+        Task task = candidate.get().task();
+        WorkloadDTO target = candidate.get().target();
         SuggestedReassignmentDTO suggestion = new SuggestedReassignmentDTO(
                 task.getId(),
                 task.getTitle(),
@@ -138,10 +142,12 @@ public class AiService {
         );
         return new ReassignmentSuggestionsDTO(
                 List.of(suggestion),
-                "This balances load without changing sprint scope.",
-                8
+                "This redistributes work without exceeding the receiving member's capacity.",
+                0
         );
     }
+
+    private record MoveCandidate(Task task, WorkloadDTO target) {}
 
     private SprintRetrospectiveDTO localRetrospective(List<VelocityTrendDTO> trend) {
         if (trend.isEmpty()) {

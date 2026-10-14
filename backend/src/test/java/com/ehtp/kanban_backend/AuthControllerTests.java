@@ -46,7 +46,7 @@ class AuthControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token", not(blankOrNullString())))
                 .andExpect(jsonPath("$.user.email").value("owner@levelup.com"))
-                .andExpect(jsonPath("$.user.role").value("OWNER"))
+                .andExpect(jsonPath("$.user.role").value("MEMBER"))
                 .andExpect(jsonPath("$.user.capacityPoints").value(40));
     }
 
@@ -70,7 +70,7 @@ class AuthControllerTests {
     @Test
     void protectedApiRejectsMissingToken() throws Exception {
         mockMvc.perform(get("/api/projects"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

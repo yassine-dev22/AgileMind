@@ -7,11 +7,16 @@ import { useSprint } from '../../context/SprintContext';
 
 const Header: React.FC = () => {
   const { sprint, currentProject, setCurrentProject } = useSprint();
-  const healthScore = sprint ? sprint.healthScore : 100;
+  const healthScore = sprint?.healthScore ?? null;
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Close profile dropdown on outside click
   useEffect(() => {
@@ -35,19 +40,21 @@ const Header: React.FC = () => {
     if (!sprint) {
       return { daysLeft: 0, totalDays: 1, timePercent: 0, timeColor: '#475569' };
     }
-    const now = Date.now();
     const start = new Date(sprint.startDate).getTime();
     const end   = new Date(sprint.endDate).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+      return { daysLeft: 0, totalDays: 1, timePercent: 0, timeColor: '#475569' };
+    }
     const total = Math.max(1, Math.ceil((end - start) / 86400000));
     const left  = Math.max(0, Math.ceil((end - now) / 86400000));
-    const pct   = Math.min(100, ((total - left) / total) * 100);
+    const pct   = Math.max(0, Math.min(100, ((total - left) / total) * 100));
 
     let color = '#10b981'; // green
     if (left <= 2)      color = '#ef4444'; // red
     else if (left <= 5) color = '#f59e0b'; // amber
 
     return { daysLeft: left, totalDays: total, timePercent: pct, timeColor: color };
-  }, [sprint]);
+  }, [sprint, now]);
 
   const timeData = [
     { name: 'Elapsed',   value: timePercent },
@@ -56,11 +63,12 @@ const Header: React.FC = () => {
 
   // ---------- Health Score Data ----------
   const healthData = [
-    { name: 'Score',     value: healthScore },
-    { name: 'Remaining', value: 100 - healthScore },
+    { name: 'Score',     value: healthScore ?? 0 },
+    { name: 'Remaining', value: 100 - (healthScore ?? 0) },
   ];
   let healthColor = '#10b981';
-  if (healthScore < 50)      healthColor = '#ef4444';
+  if (healthScore === null) healthColor = '#475569';
+  else if (healthScore < 50) healthColor = '#ef4444';
   else if (healthScore < 80) healthColor = '#f59e0b';
 
   return (
@@ -74,7 +82,7 @@ const Header: React.FC = () => {
           <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30 shadow-md">
             <span className="text-indigo-400 text-sm font-black">L</span>
           </div>
-          <span className="text-sm font-extrabold uppercase tracking-widest hidden sm:inline-block">LevelUP</span>
+          <span className="text-sm font-extrabold uppercase tracking-widest hidden sm:inline-block">AgileMind</span>
         </div>
 
         {currentProject && (
@@ -124,7 +132,7 @@ const Header: React.FC = () => {
                   </Pie>
                 </PieChart>
                 <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold" style={{ color: healthColor }}>
-                  {healthScore}
+                  {healthScore ?? '—'}
                 </span>
               </div>
               <div className="flex flex-col">

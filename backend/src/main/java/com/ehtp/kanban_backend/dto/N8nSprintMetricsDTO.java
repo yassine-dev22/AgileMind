@@ -7,6 +7,12 @@ import java.util.List;
 public class N8nSprintMetricsDTO {
     private Long projectId;
     private Long sprintId;
+    private Long analysisRevision;
+    private String sprintName;
+    private Integer plannedPoints;
+    private Integer completedPoints;
+    private Double velocityRatio;
+    private Integer healthScore;
     private String activeSprintStatus;
     private List<Double> historicalVelocity;
     private List<ResourceWorkload> resourceWorkloads;

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api/axios';
+import api, { getErrorMessage } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { Loader2, Mail, Lock } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('owner@levelup.com');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -15,15 +15,16 @@ const Login: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError('');
     
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', { email: email.trim(), password });
       login(response.data.token, response.data.user);
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Invalid credentials. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -42,7 +43,7 @@ const Login: React.FC = () => {
               <span className="text-indigo-400 text-xl font-bold">L</span>
             </div>
             <h2 className="text-2xl font-bold text-slate-100 mb-2">Welcome Back</h2>
-            <p className="text-slate-400 text-sm">Sign in to continue to LevelUP</p>
+            <p className="text-slate-400 text-sm">Sign in to continue to AgileMind</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">

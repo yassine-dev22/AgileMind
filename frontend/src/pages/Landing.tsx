@@ -10,7 +10,7 @@ const Landing: React.FC = () => {
           <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
             <span className="text-indigo-400">L</span>
           </div>
-          LevelUP
+          AgileMind
         </div>
         <div className="flex gap-4">
           <Link to="/login" className="px-4 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors">Log In</Link>
@@ -29,7 +29,7 @@ const Landing: React.FC = () => {
         </h1>
         
         <p className="text-xl text-slate-400 max-w-2xl mb-12">
-          LevelUP is a collaborative project management platform that combines traditional agile tools with real-time performance analytics and AI-driven insights to keep your team at peak velocity.
+          AgileMind is a collaborative project management platform that combines traditional agile tools with real-time performance analytics and AI-driven insights to keep your team at peak velocity.
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 mb-20">

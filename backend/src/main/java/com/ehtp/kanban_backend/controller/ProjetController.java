@@ -17,6 +17,7 @@ import com.ehtp.kanban_backend.service.AiInsightService;
 import com.ehtp.kanban_backend.service.MetricsService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -48,7 +49,7 @@ public class ProjetController {
     }
 
     @PostMapping
-    public Projet createProjet(@RequestBody ProjectRequestDTO projet) {
+    public Projet createProjet(@Valid @RequestBody ProjectRequestDTO projet) {
         return projetService.createProjet(projet);
     }
 
@@ -80,7 +81,7 @@ public class ProjetController {
 
     @PutMapping("/{id}")
     @PreAuthorize("@projectSecurity.hasRole(#id, 'MEMBER')")
-    public Projet updateProjet(@PathVariable Long id, @RequestBody ProjectRequestDTO projet) {
+    public Projet updateProjet(@PathVariable Long id, @Valid @RequestBody ProjectRequestDTO projet) {
         return projetService.updateProjet(id, projet);
     }
 
@@ -108,13 +109,13 @@ public class ProjetController {
 
     @PostMapping("/{id}/requirements")
     @PreAuthorize("@projectSecurity.hasRole(#id, 'OWNER')")
-    public Requirement addRequirement(@PathVariable Long id, @RequestBody RequirementRequestDTO reqDto) {
+    public Requirement addRequirement(@PathVariable Long id, @Valid @RequestBody RequirementRequestDTO reqDto) {
         return requirementService.createRequirementForProject(id, reqDto);
     }
 
     @PostMapping("/{id}/sprints")
     @PreAuthorize("@projectSecurity.hasRole(#id, 'OWNER')")
-    public Sprint createSprint(@PathVariable Long id, @RequestBody SprintRequestDTO sprintDto) {
+    public Sprint createSprint(@PathVariable Long id, @Valid @RequestBody SprintRequestDTO sprintDto) {
         return sprintService.createSprintForProject(id, sprintDto);
     }
 
@@ -126,7 +127,7 @@ public class ProjetController {
 
     @PostMapping("/{id}/ai-insights")
     @PreAuthorize("@projectSecurity.hasRole(#id, 'OWNER')")
-    public AiInsight ingestProjectAiInsight(@PathVariable Long id, @RequestBody AiRiskIngestionDTO dto) {
+    public AiInsight ingestProjectAiInsight(@PathVariable Long id, @Valid @RequestBody AiRiskIngestionDTO dto) {
         return aiInsightService.ingestProjectRiskInsight(id, dto);
     }
 }

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 LevelUP — AI-Powered Agile Management Platform
+# 🚀 AgileMind — AI-Powered Agile Management Platform
 
 **A professional, full-stack project management tool built for engineering teams.**  
 Kanban boards · Sprint analytics · AI-driven risk insights · Automated standup reporting.
@@ -18,7 +18,9 @@ Kanban boards · Sprint analytics · AI-driven risk insights · Automated standu
 
 ## 📖 Overview
 
-**LevelUP** is a capstone project built as a Jira/Trello-style agile platform with an integrated AI intelligence layer. It enables software teams to manage projects, sprints, and task workflows while receiving real-time AI-generated risk assessments and reassignment suggestions powered by **Google Gemini** via **n8n** automation pipelines.
+**AgileMind** is a capstone project built as a Jira/Trello-style agile platform with an integrated AI intelligence layer. It enables software teams to manage projects, sprints, and task workflows while receiving real-time AI-generated risk assessments and reassignment suggestions powered by **Google Gemini** via **n8n** automation pipelines.
+
+The application is now named AgileMind. Existing database names, Docker storage identifiers, webhook identifiers and browser storage keys retain their previous values for compatibility with existing installations.
 
 ### Key Highlights
 
@@ -34,7 +36,7 @@ Kanban boards · Sprint analytics · AI-driven risk insights · Automated standu
 ## 🏛️ Architecture
 
 ```
-LevelUP/
+AgileMind/
 ├── backend/           # Spring Boot 3 REST API (Java 17)
 │   └── src/
 │       └── main/java/
@@ -131,8 +133,8 @@ LevelUP/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yassine-dev22/LevelUP.git
-cd LevelUP
+git clone https://github.com/yassine-dev22/LevelUP.git AgileMind
+cd AgileMind
 ```
 
 ---
@@ -149,12 +151,12 @@ Edit `.env`:
 
 ```env
 # Database
-DB_URL=jdbc:postgresql://localhost:5433/levelup
+DB_URL=jdbc:postgresql://localhost:55432/levelup
 DB_USERNAME=levelup
 DB_PASSWORD=your_secure_password
 
 # JWT
-JWT_SECRET=your_cryptographically_random_secret_min_32_chars
+JWT_SECRET=
 JWT_EXPIRATION_SECONDS=86400
 
 # Google Gemini AI
@@ -176,7 +178,7 @@ VITE_API_BASE_URL=http://localhost:8082/api
 docker compose up -d
 ```
 
-This starts PostgreSQL on port `5433`. Spring Boot will auto-run migrations on startup.
+This starts PostgreSQL on loopback port `55432`. Development uses Hibernate schema updates; production validates the schema after reviewed SQL changes are applied. Configure `AI_CALLBACK_SECRET` and `N8N_WEBHOOK_SECRET` when using the AI workflow. Production also requires `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET` and `CORS_ALLOWED_ORIGINS`.
 
 ---
 

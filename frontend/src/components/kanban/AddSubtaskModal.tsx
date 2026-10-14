@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useSprint } from '../../context/SprintContext';
+import { getErrorMessage } from '../../api/axios';
 
 interface Props {
   onClose: () => void;
@@ -12,6 +13,8 @@ const AddSubtaskModal: React.FC<Props> = ({ onClose }) => {
   const [title, setTitle] = useState('');
   const [storyPoints, setStoryPoints] = useState(1);
   const [assigneeId, setAssigneeId] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!sprint) {
     return null;
@@ -20,6 +23,8 @@ const AddSubtaskModal: React.FC<Props> = ({ onClose }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (requirementId === '' || !title.trim()) return;
+    if (saving) return;
+    setSaving(true); setError(null);
     
     try {
       await addNewSubtask(
@@ -30,7 +35,9 @@ const AddSubtaskModal: React.FC<Props> = ({ onClose }) => {
       );
       onClose();
     } catch (err) {
-      console.error(err);
+      setError(getErrorMessage(err, 'Failed to add the subtask.'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -47,6 +54,7 @@ const AddSubtaskModal: React.FC<Props> = ({ onClose }) => {
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-300">Parent Requirement (Epic)</label>
             <select
@@ -97,7 +105,7 @@ const AddSubtaskModal: React.FC<Props> = ({ onClose }) => {
                 className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg p-2.5 outline-none focus:border-indigo-500 cursor-pointer"
               >
                 <option value="">Unassigned</option>
-                {members.map(m => (
+                {members.filter(member => member.role !== 'VIEWER').map(m => (
                   <option key={m.id} value={m.id}>
                     {m.fullName}
                   </option>
@@ -117,6 +125,7 @@ const AddSubtaskModal: React.FC<Props> = ({ onClose }) => {
             </button>
             <button
               type="submit"
+              disabled={saving}
               className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shadow-lg shadow-indigo-500/25"
             >
               Add Subtask

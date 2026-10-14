@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/audit-*.json
+backend/target/
+.audit/
+
+# Local documentation and reports (keep only the root README).
+*.[mM][dD]
+!/README.md
+/reports/

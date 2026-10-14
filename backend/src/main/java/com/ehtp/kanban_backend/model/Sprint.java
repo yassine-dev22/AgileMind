@@ -2,8 +2,11 @@ package com.ehtp.kanban_backend.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import org.hibernate.annotations.BatchSize;
+
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -11,10 +14,20 @@ import java.util.List;
 
 @Entity
 @Table(name = "sprints")
-@Data
-@EqualsAndHashCode(callSuper = false)
+@Getter
+@Setter
+@ToString(onlyExplicitlyIncluded = true)
+@BatchSize(size = 50)
+
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Sprint extends BaseAudit {
+    @Version
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    private long version;
+
+    @Column(name = "analysis_revision", nullable = false, columnDefinition = "bigint default 0")
+    private long analysisRevision;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -44,20 +57,23 @@ public class Sprint extends BaseAudit {
 
     public enum SprintStatus { PLANNED, ACTIVE, DONE }
 
-    @JsonIgnoreProperties({"sprints", "members", "owner"})
+    @JsonIgnoreProperties({"sprints", "requirements", "members", "owner"})
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
     private Projet project;
 
     @JsonIgnoreProperties({"sprint", "subtasks"})
-    @OneToMany(mappedBy = "sprint", cascade = CascadeType.ALL)
+    @BatchSize(size = 50)
+    @OneToMany(mappedBy = "sprint")
     private List<Requirement> requirements = new ArrayList<>();
 
     @JsonIgnoreProperties({"sprint", "requirement", "decisionNotes", "statusHistory"})
-    @OneToMany(mappedBy = "sprint", cascade = CascadeType.ALL)
+    @BatchSize(size = 50)
+    @OneToMany(mappedBy = "sprint")
     private List<Task> tasks = new ArrayList<>();
 
     @JsonIgnoreProperties("sprint")
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "sprint", cascade = CascadeType.ALL)
     private List<AiInsight> aiInsights = new ArrayList<>();
 

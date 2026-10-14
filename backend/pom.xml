@@ -5,14 +5,14 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.3.5</version>
+		<version>3.5.16</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.yassine</groupId>
-	<artifactId>kanban-backend</artifactId>
+	<artifactId>agilemind-backend</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<name>AgileMind</name>
+	<description>AgileMind collaborative Agile project management platform</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -27,7 +27,12 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>21</java.version>
+		<java.version>17</java.version>
+		<!-- Security patches newer than the Spring Boot 3.5 BOM. -->
+		<tomcat.version>10.1.60</tomcat.version>
+		<jackson-bom.version>2.21.7</jackson-bom.version>
+		<postgresql.version>42.7.12</postgresql.version>
+		<log4j2.version>2.25.5</log4j2.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -110,7 +115,7 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.13.0</version>
 				<configuration>
-					<release>21</release>
+					<release>${java.version}</release>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>

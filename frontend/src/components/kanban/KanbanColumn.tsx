@@ -7,6 +7,7 @@ import TaskCard from './TaskCard';
 interface Props {
   id: TaskStatus;
   tasks: Subtask[];
+  disabled?: boolean;
 }
 
 const COLUMN_LABELS: Record<TaskStatus, string> = {
@@ -15,10 +16,11 @@ const COLUMN_LABELS: Record<TaskStatus, string> = {
   DONE: 'Done',
 };
 
-const KanbanColumn: React.FC<Props> = ({ id, tasks }) => {
+const KanbanColumn: React.FC<Props> = ({ id, tasks, disabled }) => {
   const { setNodeRef, isOver } = useDroppable({
     id,
     data: { type: 'Column', columnId: id },
+    disabled,
   });
 
   const totalPoints = tasks.reduce((sum, t) => sum + t.effortPoints, 0);
@@ -59,7 +61,7 @@ const KanbanColumn: React.FC<Props> = ({ id, tasks }) => {
       >
         <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map(task => (
-            <TaskCard key={task.id} task={task} />
+            <TaskCard key={task.id} task={task} disabled={disabled} />
           ))}
         </SortableContext>
 

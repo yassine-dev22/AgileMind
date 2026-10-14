@@ -29,6 +29,9 @@ public class GeminiClient {
     ) {
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
+        if (model == null || !model.matches("[A-Za-z0-9._-]+")) {
+            throw new IllegalArgumentException("Gemini model must be a model identifier");
+        }
         this.model = model;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
@@ -43,9 +46,10 @@ public class GeminiClient {
         for (int attempt = 0; attempt < 2; attempt++) {
             try {
                 HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey))
+                        .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"))
                         .timeout(Duration.ofSeconds(15))
                         .header("Content-Type", "application/json")
+                        .header("x-goog-api-key", apiKey)
                         .POST(HttpRequest.BodyPublishers.ofString(buildRequestBody(prompt)))
                         .build();
 

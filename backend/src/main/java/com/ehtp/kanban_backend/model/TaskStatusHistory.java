@@ -10,21 +10,28 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import lombok.Data;
+import jakarta.persistence.FetchType;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import org.hibernate.annotations.BatchSize;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
 @Entity
-@Data
+@Getter
+@Setter
+@ToString(onlyExplicitlyIncluded = true)
+@BatchSize(size = 50)
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class TaskStatusHistory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @JsonIgnoreProperties({"statusHistory", "decisionNotes", "sprint", "assignee"})
-    @ManyToOne(optional = false)
+    @JsonIgnoreProperties({"statusHistory", "decisionNotes", "sprint", "requirement", "assignee"})
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "task_id", nullable = false)
     private Task task;
 
@@ -39,7 +46,7 @@ public class TaskStatusHistory {
     private LocalDateTime changedAt;
 
     @JsonIgnoreProperties({"tasks", "projects", "passwordHash"})
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "changed_by_user_id")
     private User changedBy;
 }

@@ -1,10 +1,11 @@
 {
-  "name": "LevelUP Sprint AI Risk Engine",
+  "name": "AgileMind Sprint AI Risk Engine",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "levelup",
+        "authentication": "headerAuth",
         "options": {}
       },
       "id": "e98e2fd5-7389-43c2-87a3-cb2b8fa58893",
@@ -38,7 +39,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=You are an elite agile project manager and risk assessor AI. Analyze the following sprint metrics:\n\nSprint ID: {{ $json.body.sprintId }}\nSprint Name: {{ $json.body.sprintName }}\nPlanned Points: {{ $json.body.plannedPoints }}\nCompleted Points: {{ $json.body.completedPoints }}\nVelocity Ratio: {{ $json.body.velocityRatio }}\nHealth Score: {{ $json.body.healthScore }}\nWorkload: {{ JSON.stringify($json.body.workloads) }}\n\nGenerate structured insights for the team. Return exactly a JSON object (no markdown, no backticks, just raw JSON) with the following structure:\n{\n  \"sprintId\": {{ $json.body.sprintId }},\n  \"predictiveRisk\": \"Write a clear predictive risk alert outlining if they are on track to finish the sprint objective.\",\n  \"reassignmentSuggestions\": \"Suggest transferring specific tasks from overloaded members to underloaded members to optimize delivery.\",\n  \"historicalPatterns\": \"Identify bottlenecks or patterns like high review hours, capacity mismatch, or lagging completion ratios.\"\n}",
+        "text": "=You are an elite agile project manager and risk assessor AI. Analyze the following sprint metrics:\n\nSprint ID: {{ $json.body.sprintId }}\nSprint Name: {{ $json.body.sprintName }}\nPlanned Points: {{ $json.body.plannedPoints }}\nCompleted Points: {{ $json.body.completedPoints }}\nVelocity Ratio: {{ $json.body.velocityRatio }}\nHealth Score: {{ $json.body.healthScore }}\nWorkload: {{ JSON.stringify($json.body.resourceWorkloads) }}\n\nGenerate structured insights for the team. Return exactly a JSON object (no markdown, no backticks, just raw JSON) with the following structure:\n{\n  \"sprintId\": {{ $json.body.sprintId }},\n  \"predictiveRisk\": \"Write a clear predictive risk alert outlining if they are on track to finish the sprint objective.\",\n  \"reassignmentSuggestions\": \"Suggest transferring specific tasks from overloaded members to underloaded members to optimize delivery.\",\n  \"historicalPatterns\": \"Identify bottlenecks or patterns like high review hours, capacity mismatch, or lagging completion ratios.\"\n}",
         "options": {
           "systemMessage": "You are a professional Agile Scrum Master and Sprint Coach. Always reply in strict JSON format as requested. Do not include markdown codeblocks in your response."
         }
@@ -55,7 +56,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8080/api/ai/callback",
+        "url": "http://host.docker.internal:8082/api/ai/callback",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -68,7 +71,7 @@
         "sendBody": true,
         "contentType": "rawBody",
         "rawContentType": "application/json",
-        "body": "={{ $json.output }}",
+        "body": "={{ JSON.stringify({ ...JSON.parse($json.output), sprintId: $('Webhook').item.json.body.sprintId, analysisRevision: $('Webhook').item.json.body.analysisRevision }) }}",
         "options": {}
       },
       "id": "0172e2bc-cb7d-472e-836e-ea78b871c503",

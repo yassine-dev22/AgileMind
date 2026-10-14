@@ -8,9 +8,10 @@ import clsx from 'clsx';
 interface Props {
   task: Subtask;
   isOverlay?: boolean;
+  disabled?: boolean;
 }
 
-const TaskCard: React.FC<Props> = ({ task, isOverlay }) => {
+const TaskCard: React.FC<Props> = ({ task, isOverlay, disabled }) => {
   const { sprint } = useSprint();
   const {
     setNodeRef,
@@ -22,6 +23,7 @@ const TaskCard: React.FC<Props> = ({ task, isOverlay }) => {
   } = useSortable({
     id: task.id,
     data: { type: 'Task', task },
+    disabled: disabled || isOverlay,
   });
 
   const style = {
@@ -30,13 +32,12 @@ const TaskCard: React.FC<Props> = ({ task, isOverlay }) => {
   };
 
   // Compute time in column dynamically
-  // @ts-ignore
   const statusChangedAt = task.statusChangedAt;
   const now = new Date().getTime();
   const changedAt = statusChangedAt ? new Date(statusChangedAt).getTime() : now;
-  const timeInColumn = Math.max(0, Math.round((now - changedAt) / (1000 * 60 * 60))); // in hours
+  const timeInColumn = Number.isFinite(changedAt) ? Math.max(0, Math.round((now - changedAt) / (1000 * 60 * 60))) : 0;
 
-  const isBottleneck = timeInColumn > 48;
+  const isBottleneck = task.status !== 'DONE' && timeInColumn > 48;
   const requirement = sprint?.requirements.find(r => r.id === task.requirementId);
   const assignee = task.assignee;
 
