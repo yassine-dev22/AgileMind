@@ -7,6 +7,7 @@ import KanbanBoard from '../src/components/kanban/KanbanBoard';
 
 const fixture = vi.hoisted(() => ({
   role: 'MEMBER',
+  projectRole: 'MEMBER',
   update: vi.fn(),
   handlers: {} as {
     onDragStart: (event: DragStartEvent) => void;
@@ -16,7 +17,7 @@ const fixture = vi.hoisted(() => ({
   },
   sprint: { id: 1, sprintStatus: 'ACTIVE', subtasks: [{ id: 1, title: 'Task', status: 'TODO', effortPoints: 3 }] },
 }));
-vi.mock('../src/context/SprintContext', () => ({ useSprint: () => ({ sprint: fixture.sprint, loading: false, updateSubtaskStatus: fixture.update, refreshData: vi.fn() }) }));
+vi.mock('../src/context/SprintContext', () => ({ useSprint: () => ({ sprint: fixture.sprint, projectRole: fixture.projectRole, loading: false, updateSubtaskStatus: fixture.update, refreshData: vi.fn() }) }));
 vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ role: fixture.role }) }));
 vi.mock('../src/api/axios', () => ({ getErrorMessage: (error: Error) => error.message }));
 vi.mock('@dnd-kit/core', () => ({
@@ -39,7 +40,7 @@ function previewMove() {
   act(() => { fixture.handlers.onDragStart({ active } as DragStartEvent); });
   act(() => { fixture.handlers.onDragOver({ active, over } as DragOverEvent); });
 }
-beforeEach(() => { fixture.update.mockReset(); fixture.role = 'MEMBER'; });
+beforeEach(() => { fixture.update.mockReset(); fixture.role = 'MEMBER'; fixture.projectRole = 'MEMBER'; });
 afterEach(cleanup);
 
 describe('Kanban status changes', () => {
@@ -68,6 +69,13 @@ describe('Kanban status changes', () => {
     await act(async () => { await fixture.handlers.onDragEnd({ active, over } as DragEndEvent); });
     expect(screen.getByTestId('TODO').getAttribute('data-disabled')).toBe('true');
     expect(screen.getByTestId('TODO').textContent).toBe('Task');
+    expect(fixture.update).not.toHaveBeenCalled();
+  });
+
+  it('disables a project viewer even when their account role is member', async () => {
+    fixture.projectRole = 'VIEWER'; render(<KanbanBoard />); previewMove();
+    await act(async () => { await fixture.handlers.onDragEnd({ active, over } as DragEndEvent); });
+    expect(screen.getByTestId('TODO').getAttribute('data-disabled')).toBe('true');
     expect(fixture.update).not.toHaveBeenCalled();
   });
 });

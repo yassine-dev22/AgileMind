@@ -69,13 +69,13 @@ public class MetricsService {
 
         List<Task> tasks = taskRepository.findBySprintSprintId(sprintId);
         Map<Long, User> users = new LinkedHashMap<>();
-        if (sprint.getProject() != null && sprint.getProject().getMembers() != null) {
-            for (User member : sprint.getProject().getMembers()) {
-                if (member.getRole() != User.Role.VIEWER) users.put(member.getId(), member);
+        if (sprint.getProject() != null) {
+            for (User member : sprint.getProject().roster()) {
+                if (sprint.getProject().canContribute(member)) users.put(member.getId(), member);
             }
         }
         for (Task task : tasks) {
-            if (task.getAssignee() != null && task.getAssignee().getRole() != User.Role.VIEWER) {
+            if (task.getAssignee() != null && sprint.getProject().canContribute(task.getAssignee())) {
                 users.put(task.getAssignee().getId(), task.getAssignee());
             }
         }

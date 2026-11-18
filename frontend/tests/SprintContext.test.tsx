@@ -33,6 +33,7 @@ function Harness() {
     <button onClick={logout}>Logout</button>
     <button onClick={() => void workspace.updateSubtaskStatus(1, 'DONE')}>Complete task</button>
     <button onClick={() => void workspace.updateSubtaskStatuses([1, 2], 'DONE').catch(() => undefined)}>Complete requirement</button>
+    <output data-testid="project-role">{workspace.projectRole}</output>
     <output data-testid="state">{JSON.stringify({ project: workspace.currentProject?.id, sprint: workspace.sprint?.id,
       tasks: workspace.sprint?.subtasks.map(task => task.title), requirements: workspace.allProjectRequirements.map(req => req.id),
       projects: workspace.projects.length, capacity: workspace.members[0]?.capacityPoints, health: workspace.sprint?.healthScore })}</output>
@@ -63,6 +64,22 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('workspace requests', () => {
+  it('uses the server project role instead of the account member role', async () => {
+    const original = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation((url, config) => {
+      if (url === '/projects/1/detail') {
+        const response = detail(1);
+        response.data.members = [{ id: 10, email: 'user@test.dev', fullName: 'User', role: 'VIEWER', capacityPoints: 40 }];
+        return Promise.resolve(response);
+      }
+      return original(url, config);
+    });
+    renderWorkspace(); await screen.findByText('Pick A');
+    fireEvent.click(screen.getByText('Pick A'));
+    await waitFor(() => expect(state().sprint).toBe(101));
+    expect(screen.getByTestId('project-role').textContent).toBe('VIEWER');
+  });
+
   it('ignores older project responses and preserves legitimate zero metrics', async () => {
     const first = deferred<ReturnType<typeof detail>>();
     const second = deferred<ReturnType<typeof detail>>();

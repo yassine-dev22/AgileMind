@@ -17,7 +17,7 @@ const COLUMNS: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE'];
 interface Preview { id: number; status: TaskStatus }
 
 const KanbanBoard: React.FC = () => {
-  const { sprint, loading, updateSubtaskStatus, refreshData } = useSprint();
+  const { sprint, loading, projectRole, updateSubtaskStatus, refreshData } = useSprint();
   const { role } = useAuth();
   const [preview, setPreview] = useState<Preview | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -25,7 +25,7 @@ const KanbanBoard: React.FC = () => {
   const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isReqPanelOpen, setIsReqPanelOpen] = useState(false);
-  const canEdit = role !== 'VIEWER' && sprint?.sprintStatus === 'ACTIVE' && !saving;
+  const canEdit = role !== 'VIEWER' && projectRole !== 'VIEWER' && sprint?.sprintStatus === 'ACTIVE' && !saving;
   const tasks = useMemo(() => (sprint?.subtasks ?? []).map(task =>
     preview?.id === task.id ? { ...task, status: preview.status, isCompleted: preview.status === 'DONE' } : task
   ), [sprint?.subtasks, preview]);

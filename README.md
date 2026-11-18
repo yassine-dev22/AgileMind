@@ -337,3 +337,31 @@ This project was developed as a **Capstone Project** for the 2nd year of enginee
 Saaf-ghost/
 Mansour</strong>
 </div>
+
+## Session 2: Co-Pilot and sprint diagnostics
+
+JWT authentication and project membership are checked before Spring delegates a question to FastAPI. Persisted project roles control access, and a global VIEWER remains read-only. The Kanban board loads tasks from the workspace API and saves status changes through the task API.
+
+| Method | Endpoint | Request / result |
+|---|---|---|
+| POST | `/ai/copilot/ask` | `{ "question": "Why was this task blocked?", "project_id": 1 }`; returns `answer` and `citations` |
+| POST | `/ai/sprintdiagnostics/trigger` | `{ "sprint_id": 1 }`; queues real metrics when health is below 60 |
+| POST | `/ai/sprint-diagnostics/trigger` | Same operation, matching the original proposal spelling |
+| GET | `/actuator/health/liveness` | Process health, without internal details |
+| GET | `/actuator/health/readiness` | Traffic readiness, including database availability |
+
+The AI routes also support the `/api/ai` prefix used by the existing frontend. The probe routes allow unauthenticated GET requests; other Actuator routes are blocked. A healthy sprint returns `SKIPPED`; a low-health sprint returns `QUEUED` when the webhook is configured or `LOCAL_FALLBACK` when it is not configured. Webhooks run after transaction commit. Delivery failures use local insights. A queued response does not confirm that n8n has completed its work.
+
+### Existing memberships
+
+New projects and invitations write `project_memberships` automatically while keeping the legacy `project_members` join table for compatibility. For existing PostgreSQL data, review and apply `backend/src/main/resources/db/project-memberships-backfill.sql`. It inserts missing owner/member rows and preserves existing explicit roles. Legacy memberships remain readable before the backfill is applied.
+
+### FastAPI connection
+
+Set `RAG_SERVICE_URL` to the separate FastAPI service and configure the same private `RAG_SERVICE_TOKEN` on both services. Spring sends the token as `X-RAG-Service-Token`. The environment example uses `http://127.0.0.1:8000`. Connection and read timeouts use `RAG_CONNECT_TIMEOUT` and `RAG_READ_TIMEOUT`.
+
+The expected FastAPI contract is `POST /ask` with `{ "question": "...", "project_id": 1 }`, returning `{ "answer": "...", "citations": [{ "type": "Task", "source_id": 1, "author": "...", "date": "...", "chunk_index": 0 }] }`. Spring validates questions up to 500 characters, rejects unauthorized projects before making an HTTP call and returns a sanitized HTTP 503 if the service is unavailable. Implementing the Python service is a separate task.
+
+### n8n connection
+
+Set `N8N_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET` and `AI_CALLBACK_SECRET`. Configure n8n Header Auth for `X-LevelUP-Webhook-Token` and use the independent `X-AI-Callback-Token` on callbacks. The payload includes current velocity, workload balance, bottlenecks and remaining days. Import the existing workflow into a running n8n instance. This session adds the backend connection; it does not deploy n8n or configure model credentials.

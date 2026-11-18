@@ -193,11 +193,10 @@ public class TaskService {
     }
 
     private User assignee(Long id, Projet project) {
-        boolean member = project.getOwner().getId() == id.longValue()
-                || project.getMembers().stream().anyMatch(user -> user.getId() == id.longValue());
-        if (!member) throw badRequest("Assignee must be a member of the project");
         User user = userRepository.findById(id).orElseThrow(() -> notFound("User"));
-        if (user.getRole() == User.Role.VIEWER) throw badRequest("A viewer cannot be assigned tasks");
+        ProjectMembership.Role role = project.roleFor(user);
+        if (role == null) throw badRequest("Assignee must be a member of the project");
+        if (!project.canContribute(user)) throw badRequest("A viewer cannot be assigned tasks");
         return user;
     }
 
