@@ -21,6 +21,11 @@ public interface ProjetRepository extends JpaRepository<Projet, Long> {
     Optional<Projet> findByIdForUpdate(@Param("id") Long id);
     @EntityGraph(attributePaths = {"owner", "members"})
     List<Projet> findDistinctByOwnerIdOrMembersId(Long ownerId, Long memberId);
+    @EntityGraph(attributePaths = {"owner", "members"})
+    @Query("select distinct p from Projet p where p.owner.id = :userId "
+            + "or exists (select m.id from ProjectMembership m where m.project = p and m.user.id = :userId) "
+            + "or exists (select legacy.id from Projet legacy join legacy.members u where legacy = p and u.id = :userId)")
+    List<Projet> findVisibleToUser(@Param("userId") Long userId);
     List<Projet> findByOwnerId(Long ownerId);
     List<Projet> findByMembersId(Long memberId);
 }

@@ -36,7 +36,7 @@ public class HomeController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot read another user's home");
         }
         List<Projet> owned = projetRepository.findByOwnerId(currentUserId);
-        List<Projet> memberOf = projetRepository.findByMembersId(currentUserId).stream()
+        List<Projet> memberOf = projetRepository.findVisibleToUser(currentUserId).stream()
                 .filter(p -> p.getOwner() == null || p.getOwner().getId() != currentUserId)
                 .collect(Collectors.toList());
 

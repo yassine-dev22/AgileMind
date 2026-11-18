@@ -17,7 +17,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     Optional<Task> findById(Long id);
 
     @EntityGraph(attributePaths = {"assignee", "sprint", "requirement"})
-    @Query("select distinct t from Task t left join t.requirement.project.members m where t.requirement.project.owner.id = :userId or m.id = :userId")
+    @Query("select distinct t from Task t left join t.requirement.project.members m "
+            + "where t.requirement.project.owner.id = :userId or m.id = :userId "
+            + "or exists (select pm.id from ProjectMembership pm where pm.project = t.requirement.project and pm.user.id = :userId)")
     List<Task> findVisibleToUser(@Param("userId") Long userId);
 
     @EntityGraph(attributePaths = {"assignee", "sprint", "requirement"})

@@ -48,6 +48,7 @@ export const Dashboard: React.FC = () => {
     loading,
     error,
     members,
+    projectRole,
     allProjectRequirements,
     refreshData,
     updateSubtaskStatus,
@@ -488,8 +489,8 @@ export const Dashboard: React.FC = () => {
   }
 
   // Determine user role relative to current project
-  const isProjOwner = user?.role !== 'VIEWER' && currentProject.owner?.id === user?.id;
-  const canEditTasks = user?.role !== 'VIEWER' && !isUpdatingTasks;
+  const isProjOwner = user?.role !== 'VIEWER' && projectRole === 'OWNER' && currentProject.owner?.id === user?.id;
+  const canEditTasks = user?.role !== 'VIEWER' && projectRole !== 'VIEWER' && !isUpdatingTasks;
 
   // Render View 2: Project Workspace View
   return (

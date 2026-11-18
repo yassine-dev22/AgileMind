@@ -2,6 +2,7 @@
 import axios from 'axios';
 import api, { getErrorMessage } from '../api/axios';
 import { AUTH_TOKEN_KEY, normalizeUser } from '../api/session';
+import type { Role } from '../api/session';
 import { useAuth } from './AuthContext';
 import type { User } from './AuthContext';
 export type { User } from './AuthContext';
@@ -50,6 +51,7 @@ interface SprintContextType {
   projects: Project[]; ownedProjects: Project[]; memberProjects: Project[];
   currentProject: Project | null; setCurrentProject: (project: Project | null) => void;
   sprint: SprintData | null; loading: boolean; error: string | null; members: User[];
+  projectRole: Role;
   allProjectRequirements: Requirement[]; refreshData: () => Promise<void>;
   updateSubtaskStatus: (subtaskId: number, status: TaskStatus) => Promise<void>;
   updateSubtaskStatuses: (subtaskIds: number[], status: TaskStatus) => Promise<void>;
@@ -91,6 +93,9 @@ const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null);
   const [sprint, setSprint] = useState<SprintData | null>(null);
   const [members, setMembers] = useState<User[]>([]);
+  // The roster contains effective project roles; default to read-only while it loads.
+  const projectRole: Role = user?.role === 'VIEWER' ? 'VIEWER'
+    : members.find(member => member.id === user?.id)?.role ?? 'VIEWER';
   const [allProjectRequirements, setAllProjectRequirements] = useState<Requirement[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -274,10 +279,10 @@ const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
   const value = useMemo(() => ({
     projects, ownedProjects, memberProjects, currentProject, setCurrentProject, sprint, loading, error,
-    members, allProjectRequirements, refreshData, updateSubtaskStatus, updateSubtaskStatuses, addNewRequirement, addNewSubtask,
+    members, projectRole, allProjectRequirements, refreshData, updateSubtaskStatus, updateSubtaskStatuses, addNewRequirement, addNewSubtask,
     createNewSprint, completeSprint, createProject, inviteMember,
   }), [projects, ownedProjects, memberProjects, currentProject, setCurrentProject, sprint, loading, error,
-    members, allProjectRequirements, refreshData, updateSubtaskStatus, updateSubtaskStatuses, addNewRequirement, addNewSubtask,
+    members, projectRole, allProjectRequirements, refreshData, updateSubtaskStatus, updateSubtaskStatuses, addNewRequirement, addNewSubtask,
     createNewSprint, completeSprint, createProject, inviteMember]);
   return <SprintContext.Provider value={value}>{children}</SprintContext.Provider>;
 };

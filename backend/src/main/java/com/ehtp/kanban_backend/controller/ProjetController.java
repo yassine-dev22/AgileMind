@@ -80,7 +80,7 @@ public class ProjetController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@projectSecurity.hasRole(#id, 'MEMBER')")
+    @PreAuthorize("@projectSecurity.hasRole(#id, 'OWNER')")
     public Projet updateProjet(@PathVariable Long id, @Valid @RequestBody ProjectRequestDTO projet) {
         return projetService.updateProjet(id, projet);
     }

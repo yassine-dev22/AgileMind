@@ -4,6 +4,7 @@ import com.ehtp.kanban_backend.model.ProjectMembership;
 import com.ehtp.kanban_backend.model.Projet;
 import com.ehtp.kanban_backend.model.User;
 import com.ehtp.kanban_backend.repository.ProjetRepository;
+import com.ehtp.kanban_backend.repository.ProjectMembershipRepository;
 import com.ehtp.kanban_backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -18,10 +19,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class AuthorizationService {
     private final UserRepository userRepository;
     private final ProjetRepository projetRepository;
+    private final ProjectMembershipRepository membershipRepository;
 
-    public AuthorizationService(UserRepository userRepository, ProjetRepository projetRepository) {
+    public AuthorizationService(UserRepository userRepository, ProjetRepository projetRepository,
+                                ProjectMembershipRepository membershipRepository) {
         this.userRepository = userRepository;
         this.projetRepository = projetRepository;
+        this.membershipRepository = membershipRepository;
     }
 
     public User currentUser() {
@@ -43,13 +47,9 @@ public class AuthorizationService {
         if (projectId == null) return null;
         Projet project = projetRepository.findById(projectId).orElse(null);
         if (project == null) return null;
-        if (project.getOwner() != null && project.getOwner().getId() == user.getId()) {
-            return user.getRole() == User.Role.VIEWER ? ProjectMembership.Role.VIEWER : ProjectMembership.Role.OWNER;
-        }
-        if (project.getMembers() != null && project.getMembers().stream().anyMatch(m -> m.getId() == user.getId())) {
-            return user.getRole() == User.Role.VIEWER ? ProjectMembership.Role.VIEWER : ProjectMembership.Role.MEMBER;
-        }
-        return null;
+        ProjectMembership.Role persistedRole = membershipRepository.findByUserIdAndProjectId(user.getId(), projectId)
+                .map(ProjectMembership::getRole).orElse(null);
+        return project.roleFor(user, persistedRole);
     }
 
     public User requireProjectOwner(Long projectId) {

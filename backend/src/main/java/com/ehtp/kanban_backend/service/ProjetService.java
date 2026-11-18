@@ -5,6 +5,7 @@ import com.ehtp.kanban_backend.dto.ProjectDetailDTO;
 import com.ehtp.kanban_backend.dto.ProjectRequestDTO;
 import com.ehtp.kanban_backend.dto.UserDTO;
 import com.ehtp.kanban_backend.model.Projet;
+import com.ehtp.kanban_backend.model.ProjectMembership;
 import com.ehtp.kanban_backend.model.Sprint;
 import com.ehtp.kanban_backend.model.Task;
 import com.ehtp.kanban_backend.model.User;
@@ -59,6 +60,7 @@ public class ProjetService {
             projet.setMembers(new ArrayList<>());
         }
         projet.getMembers().add(creator);
+        projet.getMemberships().add(new ProjectMembership(creator, projet, ProjectMembership.Role.OWNER));
         applyProjectFields(projet, dto);
         return projetRepository.save(projet);
     }
@@ -66,7 +68,7 @@ public class ProjetService {
     @Transactional(readOnly = true)
     public List<Projet> getAllProjets() {
         User user = authorizationService.currentUser();
-        return projetRepository.findDistinctByOwnerIdOrMembersId(user.getId(), user.getId());
+        return projetRepository.findVisibleToUser(user.getId());
     }
 
     @Transactional(readOnly = true)
@@ -98,7 +100,8 @@ public class ProjetService {
         Sprint activeSprint = sprintRepository.findByProjectIdAndIsActive(id, true)
                 .orElse(null);
         List<Task> tasks = activeSprint == null ? List.of() : taskRepository.findBySprintSprintId(activeSprint.getSprintId());
-        List<UserDTO> memberDTOs = project.getMembers().stream().map(UserDTO::from).toList();
+        List<UserDTO> memberDTOs = project.roster().stream()
+                .map(member -> UserDTO.from(member, project.roleFor(member))).toList();
         return new ProjectDetailDTO(project, activeSprint, tasks, memberDTOs);
     }
 
@@ -114,6 +117,13 @@ public class ProjetService {
 
         if (project.getMembers().stream().noneMatch(member -> member.getId() == invitee.getId())) {
             project.getMembers().add(invitee);
+        }
+        // Repeated invitations must not replace a deliberately restricted project role.
+        if (project.getMemberships().stream().noneMatch(entry -> entry.getUser().getId() == invitee.getId())) {
+            ProjectMembership.Role role = project.getOwner().getId() == invitee.getId()
+                    ? ProjectMembership.Role.OWNER
+                    : invitee.getRole() == User.Role.VIEWER ? ProjectMembership.Role.VIEWER : ProjectMembership.Role.MEMBER;
+            project.getMemberships().add(new ProjectMembership(invitee, project, role));
         }
 
         return projetRepository.save(project);

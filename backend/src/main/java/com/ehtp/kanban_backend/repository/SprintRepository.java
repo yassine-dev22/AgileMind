@@ -17,7 +17,9 @@ public interface SprintRepository extends JpaRepository<Sprint, Long> {
     Optional<Long> findProjectIdBySprintId(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {"project"})
-    @Query("select distinct s from Sprint s left join s.project.members m where s.project.owner.id = :userId or m.id = :userId")
+    @Query("select distinct s from Sprint s left join s.project.members m "
+            + "where s.project.owner.id = :userId or m.id = :userId "
+            + "or exists (select pm.id from ProjectMembership pm where pm.project = s.project and pm.user.id = :userId)")
     List<Sprint> findVisibleToUser(@Param("userId") Long userId);
 
     @EntityGraph(attributePaths = {"project", "tasks", "tasks.assignee"})
